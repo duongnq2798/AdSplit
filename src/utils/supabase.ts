@@ -10,8 +10,13 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://your-project-id.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
+const supabaseSchema = process.env.NEXT_PUBLIC_SUPABASE_SCHEMA || 'adsplit';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  db: {
+    schema: supabaseSchema
+  }
+});
 
 export interface DbCampaign {
   id: string;
@@ -80,17 +85,49 @@ export class SupabaseDbService {
       if (splitErr) throw splitErr;
 
       return true;
-    } catch (e) {
-      console.error('Failed to sync campaign to database:', e);
+    } catch (e: any) {
+      console.error('Failed to sync campaign to database:', e?.message || e, 'Details:', e?.details, 'Hint:', e?.hint, 'Code:', e?.code);
       return false;
     }
   }
 
-  /**
-   * Add click engagement telemetry proof to database
-   */
   async logEngagement(log: DbClickLog): Promise<boolean> {
     try {
+      // Check if parent campaign exists in database to prevent Foreign Key Violation
+      const { data: parentCampaign } = await supabase
+        .from('campaigns')
+        .select('id')
+        .eq('id', log.campaign_id)
+        .maybeSingle();
+
+      if (!parentCampaign) {
+        // Parent campaign doesn't exist (e.g. pre-seeded mockup campaign clicked in Sandbox)
+        // Dynamically insert a dummy parent campaign so click logging works flawlessly!
+        const isDefaultMockup = log.campaign_id.startsWith('0xad000');
+        const dummyCampaign: DbCampaign = {
+          id: log.campaign_id,
+          title: isDefaultMockup 
+            ? (log.campaign_id === '0xad0001bc93' ? 'Circle Web3 Developer Drive' : 'Google Cloud Starter Credits')
+            : `Sandbox Escrow Campaign (${log.campaign_id.substring(0, 8)})`,
+          advertiser: '0xd91455cCe706509F67cD6303Cec089B5F319D72A',
+          total_budget: 10.00,
+          remaining_budget: 9.80,
+          cost_per_click: log.payout_usdc > 0 ? log.payout_usdc : 0.02,
+          total_clicks: 0,
+          active: true,
+          platform_share: 300,
+          distributor_share: 1000
+        };
+
+        const { error: seedErr } = await supabase
+          .from('campaigns')
+          .insert([dummyCampaign]);
+
+        if (seedErr) {
+          console.warn('Failed to auto-seed dummy parent campaign:', seedErr.message);
+        }
+      }
+
       const { error } = await supabase
         .from('click_logs')
         .insert([log]);
@@ -108,8 +145,8 @@ export class SupabaseDbService {
       }
 
       return true;
-    } catch (e) {
-      console.error('Failed to sync click log to database:', e);
+    } catch (e: any) {
+      console.error('Failed to sync click log to database:', e?.message || e, 'Details:', e?.details, 'Hint:', e?.hint, 'Code:', e?.code);
       return false;
     }
   }

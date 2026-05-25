@@ -10,24 +10,6 @@
 [![Database: Supabase](https://img.shields.io/badge/Database-Supabase%20Postgres-3ECF8E?style=flat-square)](https://supabase.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](https://opensource.org/licenses/MIT)
 
----
-
-## 📌 Document Map
-* [1. Platform Vision & Philosophy](#1-platform-vision--philosophy)
-* [2. Capabilities & Core Modules](#2-capabilities--core-modules)
-* [3. Platform Topology & Technical Blueprint](#3-platform-topology--technical-blueprint)
-* [4. Mermaid Platform Visualizations](#4-mermaid-platform-visualizations)
-* [5. Persistence Layer & Storage Topology](#5-persistence-layer--storage-topology)
-* [6. Service Endpoints & Interface Layer](#6-service-endpoints--interface-layer)
-* [7. Protocol Mechanics & On-Chain Ledger](#7-protocol-mechanics--on-chain-ledger)
-* [8. Threat Modeling & Protection Layer](#8-threat-modeling--protection-layer)
-* [9. Cognitive Fraud Telemetry Node](#9-cognitive-fraud-telemetry-node)
-* [10. Throughput Metrics & Scaling Strategy](#10-throughput-metrics--scaling-strategy)
-* [11. Fault Tolerance & Resilience Engineering](#11-fault-tolerance--resilience-engineering)
-* [12. Telemetry & Observability Strategy](#12-telemetry--observability-strategy)
-* [13. Local Environment Bootstrap & Setup](#13-local-environment-bootstrap--setup)
-* [14. Production Setup & Runtime Rollout](#14-production-setup--runtime-rollout)
-* [15. Future Scalability Roadmap](#15-future-scalability-roadmap)
 
 ---
 
@@ -96,23 +78,25 @@ The following diagram showcases how a user interaction triggers the off-chain an
 
 ```mermaid
 flowchart LR
-    classDef main fill:#FF5A36,stroke:#090A0C,stroke-width:2px,color:#fff;
-    classDef tech fill:#f9f9f9,stroke:#090A0C,stroke-width:1px,color:#090A0C;
-    classDef contract fill:#0052FF,stroke:#090A0C,stroke-width:2px,color:#fff;
+    classDef reader fill:#35C7A4,stroke:#744D2B,stroke-width:2px,color:#fff;
+    classDef oracle fill:#E25252,stroke:#744D2B,stroke-width:2px,color:#fff;
+    classDef contract fill:#F4C455,stroke:#744D2B,stroke-width:3px,color:#5D4037;
+    classDef tech fill:#FDFBF7,stroke:#744D2B,stroke-width:2px,color:#5D4037;
+    classDef wallets fill:#FCFAF6,stroke:#744D2B,stroke-width:1px,color:#5D4037;
 
-    A[Advertiser / Brand] -->|1. Lock budget| B(AdRevenueSplitter):::contract
-    C[Web Reader] -->|2. Click Ad Banner| D[Next.js Client UI]:::tech
-    D -->|3. Send Telemetry Fingerprint| E[AI Fraud Oracle]:::main
+    A[Advertiser / Brand]:::tech -->|1. Lock budget| B(AdRevenueSplitter):::contract
+    C[Web Reader]:::reader -->|2. Click Ad Banner| D[Next.js Client UI]:::tech
+    D -->|3. Send Telemetry Fingerprint| E[AI Fraud Oracle]:::oracle
     
-    E -->|4a. Bot Traffic| F[IP Blacklist Database]:::tech
-    E -->|4b. Human Traffic| G[Vercel Server Relayer]:::main
+    E -->|4a. Bot Traffic| F[IP Blacklist Database]:::oracle
+    E -->|4b. Human Traffic| G[Vercel Server Relayer]:::tech
     
     G -->|5. Sponsor Call| H[Circle SDK API]:::tech
     H -->|6. Execute recordEngagement| B
     
-    B -->|7a. Platform Share 3%| I[Platform Wallet]:::tech
-    B -->|7b. Creator Share 85%| J[Creator Wallet]:::tech
-    B -->|7c. Dist Share 12%| K[Affiliate Wallet]:::tech
+    B -->|7a. Platform Share 3%| I[Platform Wallet]:::wallets
+    B -->|7b. Creator Share 85%| J[Creator Wallet]:::wallets
+    B -->|7c. Dist Share 12%| K[Affiliate Wallet]:::wallets
 ```
 
 > [!NOTE]
@@ -247,7 +231,28 @@ Validates click telemetry signatures, protects developer-controlled wallet crede
 
 The core logic of AdSplit is defined in `AdRevenueSplitter.sol`, which coordinates campaign escrows, handles split distributions, and verifies Oracle cryptographic signatures.
 
-### Deployed Contract Preview: `AdRevenueSplitter.sol`
+### Deployed Contract Coordinates
+* **Network**: Arc Testnet L1 (Chain ID: `5042002`)
+* **Contract Address**: `0xE75D12e1E29370A0346A25D5ef371B2B990a3c91` (Fully deployed and active)
+* **Native Gas Stablecoin**: ERC-20 USDC (`0x3600000000000000000000000000000000000000`)
+* **AI Oracle Telemetry Node**: `0xCa2d2f677CD6303cec089b5f319d72A089B5F319`
+
+### Smart Contract Compiling & Deployment Pipeline
+We have configured a comprehensive **Hardhat compilation and deployment environment** inside the root directory:
+
+#### 1. Compile Smart Contracts
+Build the Solidity binaries using the preconfigured Hardhat compiler:
+```bash
+npx hardhat compile
+```
+
+#### 2. Deploy to Arc Testnet
+Export your deployer private key inside `.env` (`DEPLOYER_PRIVATE_KEY`) and run the deployment script:
+```bash
+npx hardhat run scripts/deploy.js --network arcTestnet
+```
+
+### Deployed Contract Core Spec: `AdRevenueSplitter.sol`
 ```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
@@ -389,15 +394,28 @@ npm install
 ```
 
 ### Environment Configurations
-Create a `.env.local` file in the root directory:
+Create a `.env` file in the root directory:
 ```env
-NEXT_PUBLIC_ARC_RPC_URL=https://rpc.testnet.arc.network
-CIRCLE_API_KEY=sandbox_your_api_key
-CIRCLE_ENTITY_SECRET=your_entity_secret
-CIRCLE_WALLET_ID=your_developer_wallet_id
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://ebmwokpcgdvumrloggcw.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_SCHEMA=public
+
+# Circle Developer Platform Configuration
+NEXT_PUBLIC_CIRCLE_API_KEY=sandbox_key
+NEXT_PUBLIC_CIRCLE_ENTITY_SECRET=
+
+# Smart Contract Deployment (Arc Testnet)
+# Export your private key from MetaMask for live deployments
+DEPLOYER_PRIVATE_KEY=your_private_key
 ```
+
+### Sandbox Demo Mode Fallback (Zero-Dependency Testing)
+To make local evaluation and hackathon presentations completely frictionless, AdSplit includes a built-in **Smart Sandbox Fallback**:
+* **On-Chain Bytecode Pre-flight**: The frontend performs a live pre-flight check on the active smart contract address using `publicClient.getCode()`.
+* **Zero-Revert Fallback**: If the contract is not yet deployed (or returning no bytecode), the application seamlessly transitions to **Sandbox Demo Mode**.
+* **Simulated Ledger Sync**: In Sandbox Mode, all campaign settings, clicks, bot-fraud detections, and splits are securely processed through the Supabase persistence layer with simulated RPC receipts.
+* **Frictionless Demo**: No wallet connections, token approvals, or gas funds are required to test the telemetry engine, bot-fraud blocks, or dashboard analytics. The minute you deploy the contract, it automatically activates the live on-chain execution flow.
 
 ### Running Local Development Server
 
@@ -418,13 +436,14 @@ Deploying the project to Vercel provides optimal global performance:
 ### GitHub Actions Deployment Pipeline
 ```mermaid
 graph LR
-    classDef git fill:#f9f9f9,stroke:#090A0C,stroke-width:1px;
-    classDef pipeline fill:#FF5A36,stroke:#090A0C,stroke-width:2px,color:#fff;
+    classDef git fill:#FDFBF7,stroke:#744D2B,stroke-width:2px,color:#5D4037;
+    classDef success fill:#35C7A4,stroke:#744D2B,stroke-width:2px,color:#fff;
+    classDef pipeline fill:#F4C455,stroke:#744D2B,stroke-width:2px,color:#5D4037;
     
     A[Git Push main]:::git --> B[GitHub Actions Runner]:::pipeline
     B -->|Lint & Type check| C[ESLint & TS Check]:::pipeline
     B -->|Smart Contract Test| D[Hardhat Tests]:::pipeline
-    C -->|Success| E[Deploy to Vercel Production]:::pipeline
+    C -->|Success| E[Deploy to Vercel Production]:::success
     D -->|Success| E
 ```
 

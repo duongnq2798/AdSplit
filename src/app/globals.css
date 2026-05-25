@@ -1,13 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Nunito:wght@400..900&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #FCFCFD;
-  --foreground: #090A0C;
-  --grid-color: rgba(9, 10, 12, 0.035);
-  --accent-primary: #FF5A36;
-  --accent-primary-glow: rgba(255, 90, 54, 0.12);
-  --accent-secondary: #4F46E5;
-  --text-muted: #4B5563;
+  --background: #FDFBF7; /* Warm cream background */
+  --foreground: #5D4037; /* Dark cozy brown */
+  --accent-brown: #744D2B; /* Deep organic brown */
+  --accent-mustard: #F4C455; /* Warm yellow/mustard */
+  --accent-mustard-hover: #EAA036;
+  --accent-mint: #35C7A4; /* Muted cozy green/teal */
+  --accent-mint-hover: #21A887;
+  --accent-coral: #E25252; /* Warm cozy red */
+  --accent-coral-hover: #C93B3B;
+  --accent-purple: #B28DFF;
+  --accent-blue: #7FB3D5;
+  --accent-peach: #FAD7A0;
 }
 
 @theme inline {
@@ -18,111 +24,190 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: 'Plus Jakarta Sans', Inter, system-ui, -apple-system, sans-serif;
+  font-family: 'Nunito', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
   position: relative;
+  letter-spacing: -0.01em;
 }
 
-/* Blueprint Grid Background & Ambient Radial Glows (Inspired by Tycoon style) */
-.blueprint-bg {
-  background-color: #FCFCFD;
-  background-size: 32px 32px;
-  background-image: 
-    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-  position: relative;
+/* Wavy line style helper */
+.cozy-wave-divider {
+  height: 12px;
+  background-image: radial-gradient(circle at 100% 150%, transparent 24%, var(--accent-mustard) 24%, var(--accent-mustard) 28%, transparent 28%, transparent),
+                    radial-gradient(circle at 0% -50%, transparent 24%, var(--accent-mustard) 24%, var(--accent-mustard) 28%, transparent 28%, transparent);
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+  width: 100%;
+  opacity: 0.85;
 }
 
-.blueprint-bg::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 600px;
-  background: 
-    radial-gradient(circle at 10% 10%, rgba(255, 90, 54, 0.07) 0%, transparent 40%),
-    radial-gradient(circle at 90% 15%, rgba(79, 70, 229, 0.07) 0%, transparent 40%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Crisp Architectural Panels */
+/* Cozy tactile panels */
 .blueprint-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(9, 10, 12, 0.08);
-  border-radius: 0px; /* Elegant brutalist sharp edges or very small rounded corner */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  background: #FFFFFF;
+  border: 4px solid var(--accent-brown);
+  border-radius: 32px;
+  box-shadow: 0px 8px 0px rgba(116, 77, 43, 0.12);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+  overflow: hidden;
 }
 
 .blueprint-panel:hover {
-  border-color: rgba(9, 10, 12, 0.15);
-  box-shadow: 0 4px 12px rgba(9, 10, 12, 0.03);
+  transform: translateY(-2px);
+  box-shadow: 0px 12px 0px rgba(116, 77, 43, 0.16);
+  border-color: var(--accent-brown);
 }
 
-/* Pristine Technical Inputs */
+/* Rounded and cute form elements */
 .blueprint-input {
-  background: #FFFFFF;
-  border: 1px solid rgba(9, 10, 12, 0.12);
-  color: #090A0C;
-  border-radius: 4px;
+  background: #FCFAF6;
+  border: 3px solid rgba(116, 77, 43, 0.2);
+  color: var(--foreground);
+  border-radius: 20px;
+  padding: 10px 16px;
+  font-weight: 700;
   transition: all 0.2s ease;
+  font-family: 'Nunito', sans-serif;
 }
 
 .blueprint-input:focus {
-  border-color: var(--foreground);
+  border-color: var(--accent-brown);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(9, 10, 12, 0.05);
+  background: #FFFFFF;
+  box-shadow: 0 0 0 4px rgba(244, 196, 85, 0.25);
 }
 
-/* Solid Minimalist High-Contrast Buttons */
+/* Cozy tactile buttons */
 .btn-solid-dark {
-  background-color: #090A0C;
-  color: #FFFFFF;
-  font-weight: 700;
-  border: 1px solid #090A0C;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  background-color: var(--accent-mustard);
+  color: var(--accent-brown);
+  font-weight: 800;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 3px solid var(--accent-brown);
+  border-radius: 9999px;
+  box-shadow: 0px 5px 0px var(--accent-brown);
+  transition: all 0.1s ease;
+  cursor: pointer;
 }
 
 .btn-solid-dark:hover {
-  background-color: #1E293B;
-  border-color: #1E293B;
-  transform: translateY(-1px);
+  background-color: #FDDF88;
+  transform: translateY(2px);
+  box-shadow: 0px 3px 0px var(--accent-brown);
 }
 
 .btn-solid-dark:active {
-  transform: translateY(0px);
+  transform: translateY(5px);
+  box-shadow: 0px 0px 0px var(--accent-brown);
 }
 
-/* Custom Scrollbars */
+/* Secondary mint tactile button */
+.btn-mint-tactile {
+  background-color: var(--accent-mint);
+  color: #FFFFFF;
+  font-weight: 800;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 3px solid var(--accent-brown);
+  border-radius: 9999px;
+  box-shadow: 0px 5px 0px var(--accent-brown);
+  transition: all 0.1s ease;
+  cursor: pointer;
+}
+
+.btn-mint-tactile:hover {
+  background-color: var(--accent-mint-hover);
+  transform: translateY(2px);
+  box-shadow: 0px 3px 0px var(--accent-brown);
+}
+
+.btn-mint-tactile:active {
+  transform: translateY(5px);
+  box-shadow: 0px 0px 0px var(--accent-brown);
+}
+
+/* Danger / Exit coral button */
+.btn-coral-tactile {
+  background-color: var(--accent-coral);
+  color: #FFFFFF;
+  font-weight: 800;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 3px solid var(--accent-brown);
+  border-radius: 9999px;
+  box-shadow: 0px 5px 0px var(--accent-brown);
+  transition: all 0.1s ease;
+  cursor: pointer;
+}
+
+.btn-coral-tactile:hover {
+  background-color: var(--accent-coral-hover);
+  transform: translateY(2px);
+  box-shadow: 0px 3px 0px var(--accent-brown);
+}
+
+.btn-coral-tactile:active {
+  transform: translateY(5px);
+  box-shadow: 0px 0px 0px var(--accent-brown);
+}
+
+/* Custom Scrollbars in cozy theme */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #F3F4F6;
+  background: #FCFAF6;
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #D1D5DB;
-  border-radius: 0px;
+  background: rgba(116, 77, 43, 0.25);
+  border-radius: 9999px;
+  border: 2px solid #FCFAF6;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #9CA3AF;
+  background: rgba(116, 77, 43, 0.45);
 }
 
-/* Clean status indicators */
+/* Playful status indicators */
 .status-active-dot {
-  background-color: #10B981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  background-color: var(--accent-mint);
+  box-shadow: 0 0 0 4px rgba(53, 199, 164, 0.2);
 }
 
-/* Animations */
+/* Custom micro-animations */
+@keyframes bounce-gentle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.cozy-bounce {
+  animation: bounce-gentle 3s ease-in-out infinite;
+}
+
+/* Typographic Title Font overrides */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Fredoka', 'Nunito', sans-serif;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+/* Animation slide up */
 @keyframes slide-up {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
@@ -131,5 +216,112 @@ body {
 }
 
 .animate-slide-up {
-  animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slide-up 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.1) forwards;
 }
+
+/* --- ADSPLIT DYNAMIC LOADING SYSTEM & ANIMATION TOKENS --- */
+
+/* 1. Shimmer/Skeleton Effect */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #FAF7F2 25%, #EFEAE2 50%, #FAF7F2 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite linear;
+}
+
+.skeleton {
+  display: block;
+  width: 100%;
+  background-color: #FAF7F2;
+  border-radius: 12px;
+  border: 2px solid rgba(116, 77, 43, 0.08);
+}
+
+/* 2. Micro-interactions & Pulse */
+@keyframes pulse-gentle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(0.995);
+  }
+}
+
+.animate-pulse-gentle {
+  animation: pulse-gentle 2s ease-in-out infinite;
+}
+
+/* 3. Button inline spinner */
+@keyframes spin-cozy {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner-inline {
+  width: 13px;
+  height: 13px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  border-radius: 50%;
+  animation: spin-cozy 0.75s infinite linear;
+  display: inline-block;
+}
+
+/* Disabled button state keeping structure */
+.btn-disabled-cozy {
+  opacity: 0.65;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+  box-shadow: 0px 2px 0px var(--accent-brown) !important;
+}
+
+/* 4. Smooth page fade and slide transition */
+@keyframes page-transition-fade {
+  from {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.page-transition-active {
+  animation: page-transition-fade 0.35s cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
+}
+
+/* 5. Accessibility: Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    background-attachment: initial !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+  
+  .shimmer {
+    background: #FAF7F2 !important;
+    animation: none !important;
+  }
+}
+

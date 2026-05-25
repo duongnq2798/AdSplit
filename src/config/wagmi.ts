@@ -1,4 +1,13 @@
+import { connectorsForWallets } from '@rainbow-me/rainbowkit';
+import { 
+  metaMaskWallet, 
+  rainbowWallet, 
+  coinbaseWallet, 
+  walletConnectWallet,
+  injectedWallet
+} from '@rainbow-me/rainbowkit/wallets';
 import { createConfig, http } from 'wagmi';
+import { injected } from 'wagmi/connectors';
 import { arcTestnet } from 'viem/chains';
 
 /**
@@ -10,11 +19,28 @@ import { arcTestnet } from 'viem/chains';
  * Explorer: https://testnet.arcscan.app
  */
 
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '43e2e8e811568de51268b94876fa774e';
+
+const connectors = connectorsForWallets(
+  [
+    {
+      groupName: 'Recommended',
+      wallets: [injectedWallet, metaMaskWallet, rainbowWallet, coinbaseWallet, walletConnectWallet],
+    },
+  ],
+  {
+    appName: 'AdSplit',
+    projectId,
+  }
+);
+
 export const config = createConfig({
+  connectors: [injected(), ...connectors],
   chains: [arcTestnet],
   transports: {
     [arcTestnet.id]: http('https://rpc.testnet.arc.network'),
   },
+  ssr: true,
 });
 
 // Double check decimals constraints for native gas vs ERC-20
