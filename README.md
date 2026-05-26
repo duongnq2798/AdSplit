@@ -155,6 +155,57 @@ sequenceDiagram
 > **Security Strategy:**
 > To protect the developer credentials, all interactions with the **Circle Developer-Controlled Wallets SDK** (including Entity Secret and API Key management) are encapsulated inside the secure backend API route `/api/sponsor/route.ts` running on the server. The client bundle never exposes keys or sensitive credentials, completely mitigating attack vectors targeting the escrow funds.
 
+### 3. Core Module Lifecycle & Interaction Flow
+The following flowchart details how the four primary modules of AdSplit interact to transition an advertising campaign from deposit to live rendering, telemetry verification, and instant public ledger split settlement:
+
+```mermaid
+flowchart TD
+    classDef sponsor fill:#7FB3D5,stroke:#744D2B,stroke-width:2px,color:#fff;
+    classDef preview fill:#B28DFF,stroke:#744D2B,stroke-width:2px,color:#fff;
+    classDef shield fill:#E25252,stroke:#744D2B,stroke-width:2px,color:#fff;
+    classDef history fill:#35C7A4,stroke:#744D2B,stroke-width:2px,color:#fff;
+    classDef highlight fill:#F4C455,stroke:#744D2B,stroke-width:3px,color:#5D4037;
+
+    subgraph Module1["1. Ad Spender Office (Campaign Sponsor)"]
+        A1["Sponsor defines Ad Title, CPC & Creator Payout Share"]:::sponsor
+        A2["Deposit USDC Budget & Launch Campaign Chest"]:::sponsor
+        A3["USDC Chest locked on-chain (Arc L1 Network)"]:::sponsor
+        A1 --> A2 --> A3
+    end
+
+    subgraph Module2["2. Live Ad Preview (Creator Blog & Reader Action)"]
+        B1["Cozy Blog displays automatic Ad Banner"]:::preview
+        B2["Reader clicks the sponsored banner"]:::preview
+        B3["Browser captures client-side Telemetry metrics"]:::preview
+        B1 --> B2 --> B3
+    end
+
+    subgraph Module3["3. Anti-Fraud Shields (Telemetry Protection Guard)"]
+        C1["Oracle reviews Telemetry metrics in real time"]:::shield
+        C2{"Is click verified genuine?"}:::shield
+        C3["Flag bot_fraud: BLOCK Payout"]:::shield
+        C4["Sign cryptographic claim: ALLOW Payout"]:::shield
+        
+        C1 --> C2
+        C2 -- "No (Sybil / Bot Traffic)" --> C3
+        C2 -- "Yes (Genuine Reader)" --> C4
+    end
+
+    subgraph Module4["4. Live Activity History (Transaction Ledger)"]
+        D1["Relayer submits signed claim gaslessly"]:::history
+        D2["AdRevenueSplitter Contract splits USDC instantly"]:::history
+        D3["Split Distribution: 85% Creator / 10% Partner / 5% Platform"]:::history
+        D4["Success status and safety blocks synchronized to public Ledger"]:::history
+        
+        D1 --> D2 --> D3 --> D4
+    end
+
+    A3 -->|Chest triggers banner| B1
+    B3 -->|Submit Telemetry| C1
+    C4 -->|Authorize Telemetry claim| D1
+    C3 -->|Log Blocked threat| D4
+```
+
 ---
 
 ## 5. Persistence Layer & Storage Topology
