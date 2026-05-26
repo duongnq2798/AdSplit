@@ -13,6 +13,29 @@
 
 ---
 
+<div align="center">
+
+# 🎬 Project Demo
+
+<a href="https://www.youtube.com/watch?v=3rgCqQdxEes">
+  <img
+    src="https://img.youtube.com/vi/3rgCqQdxEes/maxresdefault.jpg"
+    width="900"
+    alt="Watch Demo"
+  />
+</a>
+
+<br/>
+<br/>
+
+<p>
+  Click the preview image to watch the full video demo on YouTube.
+</p>
+
+</div>
+
+---
+
 ## 1. Platform Vision & Philosophy
 
 ### Core Problem Solved
