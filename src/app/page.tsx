@@ -64,7 +64,9 @@ import {
   MessageCircle,
   Compass,
   Hammer,
-  HelpCircle as InfoIcon
+  HelpCircle as InfoIcon,
+  Menu,
+  X
 } from "lucide-react";
 
 // Standard ABI for AdRevenueSplitter
@@ -265,6 +267,8 @@ export default function Home() {
   const [allowVisitors, setAllowVisitors] = useState(true);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [helpTab, setHelpTab] = useState<"user" | "builder">("user");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Dynamic Clock State for top header
   const [currentTime, setCurrentTime] = useState<string>("11:57 AM");
@@ -386,6 +390,7 @@ export default function Home() {
   const handleTabChange = (newTab: "advertiser" | "creator" | "oracle" | "contract") => {
     setIsLoadingData(true);
     setActiveTab(newTab);
+    setMobileMenuOpen(false);
     setTimeout(() => {
       setIsLoadingData(false);
     }, 450);
@@ -1030,10 +1035,100 @@ export default function Home() {
     setBotAttackActive(false);
 
     setRecentNotification({
-      message: `AI Oracle detected 6 bot clicks from IP ${badIP}. Submitted cryptographic proof on-chain to protect 100% of escrow budget.`,
+      message: `Security guard caught 6 bot spam clicks from IP ${badIP}! Instantly blocked automated payouts to keep 100% of your budget safe.`,
       isError: true
     });
     setTimeout(() => setRecentNotification(null), 6000);
+  };
+
+  // Smart Onboarding Assistant (Leaf Assistant / Nook Assistant)
+  const renderOnboardingAssistant = () => {
+    return (
+      <div className="blueprint-panel p-6 bg-[#FCFAF6] border-4 border-[#744D2B] rounded-[32px] space-y-4 shadow-[0_8px_0_rgba(116,77,43,0.08)]">
+        <div className="border-b-3 border-[#744D2B]/10 pb-3 flex items-center justify-between text-[#744D2B]">
+          <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+            <span>🍃</span> Cozy Desk Assistant
+          </span>
+          <span className="text-[8px] font-mono font-black uppercase bg-white border border-[#744D2B]/20 px-2 py-0.5 rounded-md">Online</span>
+        </div>
+
+        <div className="text-xs text-[#8E7368] space-y-3 font-semibold leading-relaxed">
+          {activeTab === "advertiser" && (
+            <>
+              <p>
+                <strong>Welcome to the Ad Spender Office!</strong> Here, you can launch campaigns by putting digital dollars (USDC) into a secure campaign chest.
+              </p>
+              <p>
+                Think of it like a cozy vending machine: you fill it with coins, and every time a creator displays your ad and a reader clicks, the vending machine drops a tiny share of coins directly into the creator's wallet instantly. No middlemen, no waiting!
+              </p>
+              <div className="bg-[#FEF9E7] border-2 border-[#F4C455]/40 rounded-2xl p-3 space-y-1.5">
+                <span className="block text-[8px] text-[#744D2B] font-black uppercase tracking-wider">What happens next?</span>
+                <ol className="list-decimal pl-4 text-[10px] space-y-1">
+                  <li>Fill in the catchy title and budget above.</li>
+                  <li>Click <strong>Deposit & Launch</strong> (gas is sponsored, so it's 100% free!).</li>
+                  <li>Your ad goes live immediately in the <strong>Live Ad Preview</strong>!</li>
+                </ol>
+              </div>
+            </>
+          )}
+
+          {activeTab === "creator" && (
+            <>
+              <p>
+                <strong>Welcome to the Live Ad Preview Playground!</strong> Here, you can see how creators host sponsored ad banners on their blogs.
+              </p>
+              <p>
+                Since everything is connected directly, clicking an ad transfers digital dollars from the sponsor's chest straight to the creator in less than a second!
+              </p>
+              <div className="bg-[#FEF9E7] border-2 border-[#F4C455]/40 rounded-2xl p-3 space-y-1.5">
+                <span className="block text-[8px] text-[#744D2B] font-black uppercase tracking-wider">Interactive Walkthrough:</span>
+                <ul className="list-disc pl-4 text-[10px] space-y-1">
+                  <li>Look at the custom ad banner inside Alice's Blog post.</li>
+                  <li>Click <strong>"Try Clicking this Banner! ➔"</strong>.</li>
+                  <li>Watch the <strong>Payment Teleport Pipeline</strong> split the budget instantly in real-time!</li>
+                </ul>
+              </div>
+            </>
+          )}
+
+          {activeTab === "oracle" && (
+            <>
+              <p>
+                <strong>Welcome to the Anti-Bot Shield Control!</strong> To protect campaign budgets from automated bot clicks, our system uses telemetry checks.
+              </p>
+              <p>
+                If a bot tries to spam-click, the security guard instantly blocks the payout, safeguarding the sponsor's chest.
+              </p>
+              <div className="bg-[#FEF9E7] border-2 border-[#F4C455]/40 rounded-2xl p-3 space-y-1.5">
+                <span className="block text-[8px] text-[#744D2B] font-black uppercase tracking-wider">Try it out:</span>
+                <ul className="list-disc pl-4 text-[10px] space-y-1">
+                  <li>Click <strong>"🚨 Test Anti-Bot Shield"</strong> to launch automated spammers.</li>
+                  <li>Watch the security guard block fakes in real time while genuine clicks pass safely.</li>
+                </ul>
+              </div>
+            </>
+          )}
+
+          {activeTab === "contract" && (
+            <>
+              <p>
+                <strong>Welcome to the Live Activity History Ledger!</strong> This ledger logs every single budget deposit and click payout on the network.
+              </p>
+              <p>
+                Every record is public, permanent, and completely transparent, so sponsors and creators always have a unified source of truth without needing an accountant.
+              </p>
+              <div className="bg-[#FEF9E7] border-2 border-[#F4C455]/40 rounded-2xl p-3 space-y-1.5">
+                <span className="block text-[8px] text-[#744D2B] font-black uppercase tracking-wider">Understanding the feed:</span>
+                <ul className="list-disc pl-4 text-[10px] space-y-1">
+                  <li>Inspect blacklisted bot IPs in the safety logs.</li>
+                  <li>Input your campaign address to view dynamic network parameters in real time!</li>
+                </ul>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Computations for SaaS Dashboard
@@ -1047,43 +1142,236 @@ export default function Home() {
     <div className="min-h-screen text-[#5D4037] flex flex-col relative pb-16 bg-[#FDFBF7] select-none font-medium">
       
       {/* 1. TOP HEADER (Animal Crossing / NookPhone Cozy Styled Header) */}
-      <header className="px-8 pt-8 pb-4 max-w-7xl mx-auto w-full flex flex-col md:flex-row justify-between items-center gap-6">
-        
-        {/* Left Side: Rep Desk Branding */}
-        <div className="text-center md:text-left space-y-1">
-          <div className="flex items-center justify-center md:justify-start gap-2.5">
-            <div className="h-9 w-9 bg-[#F4C455] border-3 border-[#744D2B] rounded-2xl flex items-center justify-center text-[#744D2B] font-bold text-lg shadow-[0_4px_0_#744D2B] cozy-bounce">
-              🍃
-            </div>
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-[#744D2B] leading-none uppercase">
-              AdSplit Representative's Desk
-            </h1>
-          </div>
-          <p className="text-xs text-[#8E7368] font-bold tracking-wide italic">
-            Managing autonomous digital ad splits with dynamic styles.
-          </p>
-        </div>
-
-        {/* Right Side: Digital Clock & Date Container in tactile frame */}
-        <div className="bg-[#FFFFFF] border-4 border-[#744D2B] rounded-[24px] px-6 py-3 flex items-center gap-6 shadow-[0_6px_0_rgba(116,77,43,0.12)]">
-          <div className="border-r-3 border-[#744D2B]/30 pr-5 text-center font-mono">
-            <span className="block text-[10px] text-[#A78E84] font-extrabold uppercase leading-none">{currentDay.substring(0,3)}</span>
-            <span className="text-lg font-black text-[#744D2B] block mt-1 leading-none">{currentDate}</span>
-          </div>
+      <header className="relative md:sticky md:top-0 z-50 w-full bg-[#FDFBF7]/95 backdrop-blur-md border-b-4 border-[#744D2B] transition-all duration-300">
+        <div className="px-4 md:px-8 pt-4 pb-3.5 max-w-7xl mx-auto w-full flex flex-col gap-4">
           
-          <div className="flex flex-col items-start font-mono justify-center">
-            <span className="text-2xl font-black text-[#744D2B] tracking-tighter leading-none">
-              {currentTime.split(" ")[0]}
-            </span>
-            <span className="text-[9px] text-[#F4C455] font-extrabold uppercase tracking-widest mt-0.5 leading-none">
-              {currentTime.split(" ")[1]}
-            </span>
+          {/* Top Row: Brand Info, Clock & Mobile Menu Toggle */}
+          <div className="flex flex-row justify-between items-center gap-4 w-full">
+            {/* Left Side: Rep Desk Branding */}
+            <div className="text-left space-y-1.5">
+              <div className="flex items-center gap-2">
+                <div className="h-9 w-9 bg-[#F4C455] border-3 border-[#744D2B] rounded-2xl flex items-center justify-center text-[#744D2B] font-bold text-lg shadow-[0_4px_0_#744D2B] cozy-bounce shrink-0">
+                  🍃
+                </div>
+                <h1 className="text-lg sm:text-2xl md:text-3xl font-black tracking-tight text-[#744D2B] leading-none uppercase truncate max-w-[180px] sm:max-w-none">
+                  AdSplit Desk
+                </h1>
+              </div>
+              <p className="text-xs md:text-sm text-[#8E7368] font-bold tracking-wide italic leading-relaxed hidden sm:block mt-1">
+                Managing autonomous digital ad splits with dynamic styles.
+              </p>
+            </div>
+
+            {/* Right Side Tools Container */}
+            <div className="flex items-center gap-3 shrink-0">
+              {/* Digital Clock & Date Container in tactile frame */}
+              <div className="bg-[#FFFFFF] border-4 border-[#744D2B] rounded-[24px] px-4 py-2 flex items-center gap-4 shadow-[0_5px_0_rgba(116,77,43,0.1)] shrink-0 text-xs md:text-sm">
+                <div className="border-r-3 border-[#744D2B]/30 pr-3.5 text-center font-mono">
+                  <span className="block text-[8px] text-[#A78E84] font-extrabold uppercase leading-none">{currentDay.substring(0,3)}</span>
+                  <span className="text-sm font-black text-[#744D2B] block mt-1 leading-none">{currentDate}</span>
+                </div>
+                
+                <div className="flex flex-col items-start font-mono justify-center">
+                  <span className="text-base font-black text-[#744D2B] tracking-tighter leading-none">
+                    {currentTime.split(" ")[0]}
+                  </span>
+                  <span className="text-[8px] text-[#F4C455] font-extrabold uppercase tracking-widest mt-0.5 leading-none">
+                    {currentTime.split(" ")[1]}
+                  </span>
+                </div>
+              </div>
+
+              {/* Mobile Burger Menu Toggle Button */}
+              <button 
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden flex items-center justify-center h-10 w-10 bg-[#FFFFFF] border-3 border-[#744D2B] rounded-2xl text-[#744D2B] shadow-[0_3px_0_#744D2B] active:translate-y-0.5 active:shadow-[0_1.5px_0_#744D2B] transition-all cursor-pointer shrink-0"
+                aria-label="Toggle navigation menu"
+              >
+                {mobileMenuOpen ? (
+                  <X className="h-5 w-5 stroke-[2.5]" />
+                ) : (
+                  <Menu className="h-5 w-5 stroke-[2.5]" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Row: Navigation Tabs & Wallet Widget */}
+          <div className={`flex-col md:flex-row justify-between items-center gap-4 pt-1 ${
+            mobileMenuOpen ? "flex animate-slide-up" : "hidden md:flex"
+          }`}>
+            {/* Navigation bar representing Quick Access desk directories */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-xs font-black uppercase tracking-wider">
+              <button 
+                onClick={() => handleTabChange("advertiser")}
+                className={`px-5 py-2.5 rounded-full border-3 border-[#744D2B] transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === "advertiser" 
+                    ? "bg-[#F4C455] text-[#744D2B] shadow-[0_4px_0_#744D2B] -translate-y-0.5" 
+                    : "bg-white text-[#8E7368] shadow-[0_2px_0_#744D2B] hover:bg-gray-50 hover:-translate-y-0.5"
+                }`}
+              >
+                <Hammer className="h-4 w-4" />
+                Ad Spender Office
+              </button>
+              
+              <button 
+                onClick={() => handleTabChange("creator")}
+                className={`px-5 py-2.5 rounded-full border-3 border-[#744D2B] transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === "creator" 
+                    ? "bg-[#7FB3D5] text-white shadow-[0_4px_0_#744D2B] -translate-y-0.5" 
+                    : "bg-white text-[#8E7368] shadow-[0_2px_0_#744D2B] hover:bg-gray-50 hover:-translate-y-0.5"
+                }`}
+              >
+                <Globe className="h-4 w-4" />
+                Live Ad Preview
+              </button>
+
+              <button 
+                onClick={() => handleTabChange("oracle")}
+                className={`px-5 py-2.5 rounded-full border-3 border-[#744D2B] transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === "oracle" 
+                    ? "bg-[#B28DFF] text-white shadow-[0_4px_0_#744D2B] -translate-y-0.5" 
+                    : "bg-white text-[#8E7368] shadow-[0_2px_0_#744D2B] hover:bg-gray-50 hover:-translate-y-0.5"
+                }`}
+              >
+                <Activity className="h-4 w-4" />
+                Anti-Fraud Shields
+              </button>
+
+              <button 
+                onClick={() => handleTabChange("contract")}
+                className={`px-5 py-2.5 rounded-full border-3 border-[#744D2B] transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === "contract" 
+                    ? "bg-[#35C7A4] text-white shadow-[0_4px_0_#744D2B] -translate-y-0.5" 
+                    : "bg-white text-[#8E7368] shadow-[0_2px_0_#744D2B] hover:bg-gray-50 hover:-translate-y-0.5"
+                }`}
+              >
+                <Terminal className="h-4 w-4" />
+                Live Activity History
+              </button>
+            </div>
+
+            {/* Connected wallet widget styled dynamically using RainbowKit */}
+            <div className="font-mono text-xs flex items-center gap-2">
+              <ConnectButton.Custom>
+                {({
+                  account,
+                  chain,
+                  openAccountModal,
+                  openChainModal,
+                  openConnectModal,
+                  authenticationStatus,
+                  mounted,
+                }) => {
+                  const ready = mounted && authenticationStatus !== 'loading';
+                  const connected =
+                    ready &&
+                    account &&
+                    chain &&
+                    (!authenticationStatus ||
+                      authenticationStatus === 'authenticated');
+
+                  return (
+                    <div
+                      {...(!ready && {
+                        'aria-hidden': true,
+                        'style': {
+                          opacity: 0,
+                          pointerEvents: 'none',
+                          userSelect: 'none',
+                        },
+                      })}
+                    >
+                      {(() => {
+                        if (!connected) {
+                          return (
+                            <button
+                              onClick={handleDirectConnect}
+                              type="button"
+                              className="btn-solid-dark py-2.5 px-5 flex items-center gap-2 cursor-pointer transition-all"
+                            >
+                              <Wallet className="h-4 w-4" />
+                              Connect Wallet
+                            </button>
+                          );
+                        }
+
+                        if (chain.unsupported) {
+                          return (
+                            <button
+                              onClick={openChainModal}
+                              type="button"
+                              className="btn-solid-dark bg-[#E25252] hover:bg-[#C93B3B] py-2.5 px-5 flex items-center gap-2 cursor-pointer shadow-[0_4px_0_#744D2B]"
+                            >
+                              Wrong Network
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              onClick={openChainModal}
+                              style={{ display: 'flex', alignItems: 'center' }}
+                              type="button"
+                              className="bg-[#FCFAF6] hover:bg-[#FEF9E7] border-3 border-[#744D2B] px-3.5 py-2 rounded-2xl font-bold text-[#744D2B] shadow-[0_3px_0_#744D2B] transition-all cursor-pointer"
+                            >
+                              {chain.hasIcon && (
+                                <div
+                                  style={{
+                                    background: chain.iconBackground,
+                                    width: 12,
+                                    height: 12,
+                                    borderRadius: 999,
+                                    overflow: 'hidden',
+                                    marginRight: 4,
+                                  }}
+                                >
+                                  {chain.iconUrl && (
+                                    <img
+                                      alt={chain.name ?? 'Chain icon'}
+                                      src={chain.iconUrl}
+                                      style={{ width: '100%', height: '100%' }}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                              {chain.name}
+                            </button>
+
+                            <button
+                              onClick={openAccountModal}
+                              type="button"
+                              className="bg-[#FFFFFF] hover:bg-[#FCFAF6] border-3 border-[#744D2B] px-4 py-2 rounded-2xl flex items-center gap-2.5 shadow-[0_3px_0_#744D2B] transition-all cursor-pointer"
+                            >
+                              <span className="h-2.5 w-2.5 rounded-full bg-[#35C7A4] status-active-dot animate-pulse"></span>
+                              <span className="font-bold text-[#744D2B]">
+                                {account.displayName}
+                              </span>
+                              {account.displayBalance && !account.displayBalance.includes("NaN") ? (
+                                <span className="text-[10px] bg-[#FEF9E7] text-[#744D2B] font-black border-2 border-[#744D2B]/20 px-2 py-0.5 rounded-lg">
+                                  {account.displayBalance}
+                                </span>
+                              ) : userBalance && !userBalance.includes("NaN") ? (
+                                <span className="text-[10px] bg-[#FEF9E7] text-[#744D2B] font-black border-2 border-[#744D2B]/20 px-2 py-0.5 rounded-lg">
+                                  {userBalance} USDC
+                                </span>
+                              ) : null}
+                            </button>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                }}
+              </ConnectButton.Custom>
+            </div>
           </div>
         </div>
       </header>
 
       {/* YELLOW WAVY DOODLE DIVIDER LINE */}
-      <div className="max-w-7xl mx-auto w-full px-8 my-4 select-none">
+      <div className="max-w-7xl mx-auto w-full px-4 md:px-8 my-4 select-none">
         <div className="cozy-wave-divider"></div>
       </div>
 
@@ -1104,179 +1392,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* 2. MAJESTIC BANNER AND NAVIGATION TABS */}
-      <section className="max-w-7xl mx-auto w-full px-8 pt-2 pb-6 space-y-6">
-        
-        {/* Navigation bar representing Quick Access desk directories */}
-        <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-xs font-black uppercase tracking-wider">
-          <button 
-            onClick={() => handleTabChange("advertiser")}
-            className={`px-5 py-2.5 rounded-full border-3 border-[#744D2B] transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === "advertiser" 
-                ? "bg-[#F4C455] text-[#744D2B] shadow-[0_4px_0_#744D2B] -translate-y-0.5" 
-                : "bg-white text-[#8E7368] shadow-[0_2px_0_#744D2B] hover:bg-gray-50 hover:-translate-y-0.5"
-            }`}
-          >
-            <Hammer className="h-4 w-4" />
-            Advertiser Node
-          </button>
-          
-          <button 
-            onClick={() => handleTabChange("creator")}
-            className={`px-5 py-2.5 rounded-full border-3 border-[#744D2B] transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === "creator" 
-                ? "bg-[#7FB3D5] text-white shadow-[0_4px_0_#744D2B] -translate-y-0.5" 
-                : "bg-white text-[#8E7368] shadow-[0_2px_0_#744D2B] hover:bg-gray-50 hover:-translate-y-0.5"
-            }`}
-          >
-            <Globe className="h-4 w-4" />
-            Creator Sandbox
-          </button>
-
-          <button 
-            onClick={() => handleTabChange("oracle")}
-            className={`px-5 py-2.5 rounded-full border-3 border-[#744D2B] transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === "oracle" 
-                ? "bg-[#B28DFF] text-white shadow-[0_4px_0_#744D2B] -translate-y-0.5" 
-                : "bg-white text-[#8E7368] shadow-[0_2px_0_#744D2B] hover:bg-gray-50 hover:-translate-y-0.5"
-            }`}
-          >
-            <Activity className="h-4 w-4" />
-            Click Oracle
-          </button>
-
-          <button 
-            onClick={() => handleTabChange("contract")}
-            className={`px-5 py-2.5 rounded-full border-3 border-[#744D2B] transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === "contract" 
-                ? "bg-[#35C7A4] text-white shadow-[0_4px_0_#744D2B] -translate-y-0.5" 
-                : "bg-white text-[#8E7368] shadow-[0_2px_0_#744D2B] hover:bg-gray-50 hover:-translate-y-0.5"
-            }`}
-          >
-            <Terminal className="h-4 w-4" />
-            Explorer & Webhooks
-          </button>
-
-          {/* Connected wallet widget styled dynamically using RainbowKit */}
-          <div className="md:ml-auto font-mono text-xs flex items-center gap-2">
-            <ConnectButton.Custom>
-              {({
-                account,
-                chain,
-                openAccountModal,
-                openChainModal,
-                openConnectModal,
-                authenticationStatus,
-                mounted,
-              }) => {
-                const ready = mounted && authenticationStatus !== 'loading';
-                const connected =
-                  ready &&
-                  account &&
-                  chain &&
-                  (!authenticationStatus ||
-                    authenticationStatus === 'authenticated');
-
-                return (
-                  <div
-                    {...(!ready && {
-                      'aria-hidden': true,
-                      'style': {
-                        opacity: 0,
-                        pointerEvents: 'none',
-                        userSelect: 'none',
-                      },
-                    })}
-                  >
-                    {(() => {
-                      if (!connected) {
-                        return (
-                          <button
-                            onClick={handleDirectConnect}
-                            type="button"
-                            className="btn-solid-dark py-2.5 px-5 flex items-center gap-2 cursor-pointer transition-all"
-                          >
-                            <Wallet className="h-4 w-4" />
-                            Connect Wallet
-                          </button>
-                        );
-                      }
-
-                      if (chain.unsupported) {
-                        return (
-                          <button
-                            onClick={openChainModal}
-                            type="button"
-                            className="btn-solid-dark bg-[#E25252] hover:bg-[#C93B3B] py-2.5 px-5 flex items-center gap-2 cursor-pointer shadow-[0_4px_0_#744D2B]"
-                          >
-                            Wrong Network
-                          </button>
-                        );
-                      }
-
-                      return (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            onClick={openChainModal}
-                            style={{ display: 'flex', alignItems: 'center' }}
-                            type="button"
-                            className="bg-[#FCFAF6] hover:bg-[#FEF9E7] border-3 border-[#744D2B] px-3.5 py-2 rounded-2xl font-bold text-[#744D2B] shadow-[0_3px_0_#744D2B] transition-all cursor-pointer"
-                          >
-                            {chain.hasIcon && (
-                              <div
-                                style={{
-                                  background: chain.iconBackground,
-                                  width: 12,
-                                  height: 12,
-                                  borderRadius: 999,
-                                  overflow: 'hidden',
-                                  marginRight: 4,
-                                }}
-                              >
-                                {chain.iconUrl && (
-                                  <img
-                                    alt={chain.name ?? 'Chain icon'}
-                                    src={chain.iconUrl}
-                                    style={{ width: '100%', height: '100%' }}
-                                  />
-                                )}
-                              </div>
-                            )}
-                            {chain.name}
-                          </button>
-
-                          <button
-                            onClick={openAccountModal}
-                            type="button"
-                            className="bg-[#FFFFFF] hover:bg-[#FCFAF6] border-3 border-[#744D2B] px-4 py-2 rounded-2xl flex items-center gap-2.5 shadow-[0_3px_0_#744D2B] transition-all cursor-pointer"
-                          >
-                            <span className="h-2.5 w-2.5 rounded-full bg-[#35C7A4] status-active-dot animate-pulse"></span>
-                            <span className="font-bold text-[#744D2B]">
-                              {account.displayName}
-                            </span>
-                            {account.displayBalance && !account.displayBalance.includes("NaN") ? (
-                              <span className="text-[10px] bg-[#FEF9E7] text-[#744D2B] font-black border-2 border-[#744D2B]/20 px-2 py-0.5 rounded-lg">
-                                {account.displayBalance}
-                              </span>
-                            ) : userBalance && !userBalance.includes("NaN") ? (
-                              <span className="text-[10px] bg-[#FEF9E7] text-[#744D2B] font-black border-2 border-[#744D2B]/20 px-2 py-0.5 rounded-lg">
-                                {userBalance} USDC
-                              </span>
-                            ) : null}
-                          </button>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                );
-              }}
-            </ConnectButton.Custom>
-          </div>
-        </div>
-      </section>
-
       {/* 3. MULTI-COLUMN DESIGN CONSOLE GRID (Warm tactile card layout) */}
-      <main className="max-w-7xl mx-auto w-full px-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <main className="max-w-7xl mx-auto w-full px-4 md:px-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* COLUMN 1 & 2: Active Plan Area */}
         <div className="lg:col-span-2 space-y-8">
@@ -1293,24 +1410,24 @@ export default function Home() {
             <div className="p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white">
               <div className="space-y-1.5">
                 <span className="text-[9px] font-mono font-bold tracking-widest text-[#F4C455] uppercase bg-[#FEF9E7] border-2 border-[#F4C455]/30 px-2.5 py-0.5 rounded-full inline-block">
-                  Cozy Programmable Splits
+                  Warm & Friendly Shared Ad Pools
                 </span>
                 <h3 className="text-xl font-black tracking-tight text-[#744D2B] leading-none uppercase">
-                  AdSplit Smart Escrow Vault Node
+                  Automatic Safe Ad Chest
                 </h3>
                 <p className="text-xs text-[#8E7368] leading-relaxed max-w-xl font-medium">
-                  By utilizing native ERC-20 USDC as gas token on Arc L1 and integrating Circle SDKs, AdSplit provides immediate, trustless split settlement. Freeing digital creators from waiting 45 days for Web2 payout locks.
+                  When sponsors lock budgets in our safe chest, digital creators get paid automatically the very second a reader clicks their ad. No middlemen, no 45-day delay, and no complex fees—just instant rewards powered by digital cash.
                 </p>
               </div>
 
               <div className="flex gap-4 shrink-0 font-mono text-center md:text-left">
                 <div className="border-3 border-[#744D2B] bg-[#FCFAF6] p-3 rounded-2xl shadow-[0_3px_0_#744D2B] min-w-[95px]">
-                  <span className="block text-[8px] text-[#A78E84] uppercase font-black leading-none">Friction Fee</span>
+                  <span className="block text-[8px] text-[#A78E84] uppercase font-black leading-none">Support Share</span>
                   <span className="text-sm font-black text-[#744D2B] block mt-1">3.0%</span>
                 </div>
                 <div className="border-3 border-[#744D2B] bg-[#FEF9E7] p-3 rounded-2xl shadow-[0_3px_0_#744D2B] min-w-[95px]">
-                  <span className="block text-[8px] text-[#A78E84] uppercase font-black leading-none">Settlement</span>
-                  <span className="text-sm font-black text-[#35C7A4] block mt-1">0.8s</span>
+                  <span className="block text-[8px] text-[#A78E84] uppercase font-black leading-none">Payment Speed</span>
+                  <span className="text-sm font-black text-[#35C7A4] block mt-1">Instant</span>
                 </div>
               </div>
             </div>
@@ -1328,7 +1445,7 @@ export default function Home() {
                   <div className="flex items-center gap-2 border-b-3 border-[#744D2B]/10 pb-3.5 select-none">
                     <Plus className="h-5 w-5 text-[#F4C455]" />
                     <h4 className="text-xs font-black uppercase tracking-wider text-[#744D2B]">
-                      Create On-chain Campaign Escrow Pool
+                      Start a Cozy Ad Campaign & Sponsor Budget
                     </h4>
                   </div>
 
@@ -1348,7 +1465,7 @@ export default function Home() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-[9px] text-[#8E7368] font-extrabold uppercase block tracking-wider">Payout Split Scheme</label>
+                        <label className="text-[9px] text-[#8E7368] font-extrabold uppercase block tracking-wider">How Payouts are Shared</label>
                         <select className="w-full blueprint-input bg-white" disabled={isCreatingCampaign}>
                           <option>Default: 85% Lead Creator, 10% Distributor, 5% Platform</option>
                         </select>
@@ -1357,7 +1474,7 @@ export default function Home() {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-1.5 font-mono">
-                        <label className="text-[9px] text-[#8E7368] font-extrabold uppercase block tracking-wider">Total Escrow Budget (USDC)</label>
+                        <label className="text-[9px] text-[#8E7368] font-extrabold uppercase block tracking-wider">Total Campaign Budget (USDC)</label>
                         <input
                           type="number"
                           placeholder="2"
@@ -1370,7 +1487,7 @@ export default function Home() {
                       </div>
 
                       <div className="space-y-1.5 font-mono">
-                        <label className="text-[9px] text-[#8E7368] font-extrabold uppercase block tracking-wider">Cost-Per-Click in USDC</label>
+                        <label className="text-[9px] text-[#8E7368] font-extrabold uppercase block tracking-wider">Price per Ad Click (USDC)</label>
                         <input
                           type="text"
                           placeholder="0.02"
@@ -1383,7 +1500,7 @@ export default function Home() {
                       </div>
 
                       <div className="space-y-1.5 font-mono">
-                        <label className="text-[9px] text-[#8E7368] font-extrabold uppercase block tracking-wider">Lead Creator split share</label>
+                        <label className="text-[9px] text-[#8E7368] font-extrabold uppercase block tracking-wider">Creator's Payout Share</label>
                         <input
                           type="range"
                           min="30"
@@ -1409,10 +1526,10 @@ export default function Home() {
                         }`}
                       >
                         {isCreatingCampaign ? (
-                          <ButtonLoader text="Deploying Smart Escrow Pool..." />
+                          <ButtonLoader text="🌱 Launching your campaign chest on the network..." />
                         ) : (
                           <>
-                            <Plus className="h-4 w-4" /> Deposit USDC & Lock Smart Contract
+                            <Plus className="h-4 w-4" />Deposit Digital Dollars & Launch Campaign
                           </>
                         )}
                       </button>
@@ -1425,7 +1542,7 @@ export default function Home() {
                   <div className="flex items-center gap-2 border-b-3 border-[#744D2B]/10 pb-3.5 select-none">
                     <Layers className="h-5 w-5 text-[#F4C455]" />
                     <h4 className="text-xs font-black uppercase tracking-wider text-[#744D2B]">
-                      Active Ad Campaign Escrow Pools
+                      Active Sponsored Ad Campaigns
                     </h4>
                   </div>
 
@@ -1451,15 +1568,15 @@ export default function Home() {
                             </div>
                             
                             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-[#8E7368]">
-                              <div>Advertiser: <span className="font-mono text-[#744D2B] font-bold">{camp.advertiser.substr(0, 8)}...</span></div>
-                              <div>CPC: <span className="font-mono text-[#F4C455] font-bold">{camp.cost_per_click.toFixed(2)} USDC</span></div>
-                              <div>Clicks Locked: <span className="font-mono text-[#7FB3D5] font-bold">{camp.total_clicks}</span></div>
+                              <div>Sponsor: <span className="font-mono text-[#744D2B] font-bold">{camp.advertiser.substr(0, 8)}...</span></div>
+                              <div>Click Payout: <span className="font-mono text-[#F4C455] font-bold">{camp.cost_per_click.toFixed(2)} USDC</span></div>
+                              <div>Total Clicks: <span className="font-mono text-[#7FB3D5] font-bold">{camp.total_clicks}</span></div>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-4 w-full sm:w-auto justify-between border-t-2 sm:border-t-0 border-[#744D2B]/10 pt-3 sm:pt-0">
                             <div className="text-left sm:text-right">
-                              <span className="block text-[8px] text-[#A78E84] uppercase font-black leading-none">Vault Balance</span>
+                              <span className="block text-[8px] text-[#A78E84] uppercase font-black leading-none">Remaining Budget</span>
                               <span className="text-xs font-black text-[#744D2B] font-mono block mt-1 leading-none">
                                 {camp.remaining_budget.toFixed(2)} / {camp.total_budget.toFixed(2)} <span className="text-[8px] text-[#A78E84]">USDC</span>
                               </span>
@@ -1476,10 +1593,10 @@ export default function Home() {
                                 {withdrawingCampaignId === camp.id ? (
                                   <span className="flex items-center gap-1">
                                     <span className="spinner-inline border-t-[#E25252] border-right-[#E25252]" />
-                                    Refunding...
+                                    Reclaiming...
                                   </span>
                                 ) : (
-                                  "Refund Escrow"
+                                  "Reclaim Budget"
                                 )}
                               </button>
                             ) : (
@@ -1519,9 +1636,9 @@ export default function Home() {
 
                   <div className="p-6 md:p-8 space-y-6">
                     <div className="space-y-2">
-                      <span className="text-[9px] font-bold text-[#F4C455] uppercase tracking-widest block font-mono">Web3 Technology & Splits</span>
+                      <span className="text-[9px] font-bold text-[#F4C455] uppercase tracking-widest block font-mono">Instant Payouts & Creative Freedom</span>
                       <h2 className="text-xl md:text-2xl font-black text-[#744D2B] tracking-tight leading-none uppercase">
-                        Why Circle & Arc Testnet Empower Digital Creators with Dynamic Revenue Splits
+                        Why Digital Creators Get Paid Instantly Without Waiting Months
                       </h2>
                       <div className="text-[9px] text-[#A78E84] flex items-center gap-2 font-mono font-black uppercase">
                         <span>By Alice Vance</span>
@@ -1534,10 +1651,10 @@ export default function Home() {
 
                     <div className="text-xs text-[#8E7368] space-y-4 leading-relaxed font-medium">
                       <p>
-                        Traditional Web2 ad networks (Google AdSense, Meta) retain between 30% to 45% of sponsor budgets, forcing content creators to wait 30-45 days for settlement payouts. In many cases, accounts are locked arbitrarily (unjustified bans), freezing accumulated earnings indefinitely.
+                        Traditional ad networks keep a huge slice of sponsor budgets and make creators wait 30 to 45 days just to get their earnings. Sometimes they even freeze creator accounts without warning.
                       </p>
                       <p>
-                        With Arc L1 smart contracts, revenue splits are fully programmable. The moment a click is cryptographically signed, USDC is instantly disbursed from the advertiser's escrow and split directly into creators' and distributors' wallets in the exact same block transaction.
+                        With our safe ad chests, payments are split automatically. The very instant a reader clicks an ad banner, digital cash (USDC) is sent directly from the sponsor's chest straight to the creator's wallet in less than a second—all completely verified and safe.
                       </p>
                     </div>
 
@@ -1545,7 +1662,7 @@ export default function Home() {
                     <div className="my-6 border-4 border-[#744D2B] bg-[#FEF9E7] rounded-[24px] p-5 flex flex-col sm:flex-row items-center justify-between gap-4 relative shadow-[0_6px_0_rgba(116,77,43,0.08)]">
                       <div className="space-y-1 text-center sm:text-left select-none">
                         <span className="bg-[#F4C455]/20 text-[#744D2B] border-2 border-[#F4C455]/50 text-[8px] font-mono font-black tracking-widest px-3 py-1 rounded-full uppercase inline-block">
-                          Sponsored Banner (AdSplit Protocol)
+                          Sponsored Ad Banner (Powered by AdSplit)
                         </span>
                         
                         <h3 className="font-black text-sm text-[#744D2B] mt-2.5 flex items-center gap-2 justify-center sm:justify-start leading-none tracking-tight uppercase">
@@ -1568,10 +1685,10 @@ export default function Home() {
                             {isClicking ? (
                               <>
                                 <span className="spinner-inline shrink-0" />
-                                <span>Attesting click...</span>
+                                <span>Processing instant reward...</span>
                               </>
                             ) : (
-                              "Simulate Banner Click →"
+                              "Try Clicking this Banner! ➔"
                             )}
                           </button>
                         ) : (
@@ -1586,14 +1703,14 @@ export default function Home() {
                         <div className="absolute inset-0 bg-white/95 rounded-[20px] flex flex-col items-center justify-center p-4 text-center z-20">
                           <div className="flex items-center gap-1.5 text-xs text-[#744D2B] font-black uppercase tracking-wider mb-2 font-mono">
                             <Activity className="h-4.5 w-4.5 text-[#F4C455] animate-spin" />
-                            Arc Onchain Relayer Sequence
+                            Payment Teleport Pipeline 🚀
                           </div>
                           
                           <div className="max-w-md w-full space-y-2">
                             <div className="flex justify-between text-[8px] text-[#A78E84] font-mono font-black uppercase">
-                              <span className={step >= 1 ? "text-[#F4C455]" : ""}>1. Bot IP Check</span>
-                              <span className={step >= 2 ? "text-[#7FB3D5]" : ""}>2. Gasless Sign</span>
-                              <span className={step >= 3 ? "text-[#35C7A4]" : ""}>3. Split Settled</span>
+                              <span className={step >= 1 ? "text-[#F4C455]" : ""}>1. Safety Check</span>
+                              <span className={step >= 2 ? "text-[#7FB3D5]" : ""}>2. Free Delivery</span>
+                              <span className={step >= 3 ? "text-[#35C7A4]" : ""}>3. Instant Payment</span>
                             </div>
                             <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden border-2 border-[#744D2B]/10">
                               <div 
@@ -1602,9 +1719,9 @@ export default function Home() {
                               ></div>
                             </div>
                             <span className="text-[8px] text-[#A78E84] font-mono italic block font-bold">
-                              {step === 1 && "AI Oracle evaluating unique click signature..."}
-                              {step === 2 && "Broadcasting cryptographic Gasless transaction..."}
-                              {step === 3 && "Smart Contract split executed successfully!"}
+                              {step === 1 && "Safety guard verifying ad click authenticity..."}
+                              {step === 2 && "Processing fee-free digital cash transfer..."}
+                              {step === 3 && "Success! Funds split and sent instantly to wallets."}
                             </span>
                           </div>
                         </div>
@@ -1626,10 +1743,10 @@ export default function Home() {
                     <div className="space-y-1.5">
                       <h3 className="text-xs font-black text-[#744D2B] uppercase tracking-wider flex items-center gap-2 leading-none">
                         <ShieldAlert className="h-6 w-6 text-[#E25252] animate-pulse" />
-                        Sybil Bot Click Fraud Simulator
+                        Anti-Bot Shield Simulator
                       </h3>
                       <p className="text-xs text-[#8E7368] max-w-xl leading-relaxed font-bold">
-                        Simulate a malicious botnet executing automated ad click attacks. The AI Oracle Node monitors behavior, verifies unique cryptographic signatures, and automatically blocks illicit payouts, preserving advertiser escrow budget.
+                        Simulate automated bots attempting to steal campaign funds by spam-clicking ads. The safety shield monitors behavior in real time, automatically spots automated patterns, and instantly blocks fake clicks to keep the sponsor's budget 100% safe.
                       </p>
                     </div>
 
@@ -1641,7 +1758,7 @@ export default function Home() {
                       }`}
                     >
                       <Play className="h-4 w-4" />
-                      {botAttackActive ? `Attacking (${botClickCount})...` : "Launch Botnet Attack"}
+                      {botAttackActive ? `Testing (${botClickCount})...` : "Test Anti-Bot Shield"}
                     </button>
                   </div>
                 </div>
@@ -1651,10 +1768,10 @@ export default function Home() {
                   <div className="flex items-center justify-between border-b-3 border-[#744D2B]/10 pb-3.5 select-none">
                     <h4 className="text-xs font-black uppercase tracking-wider text-[#744D2B] flex items-center gap-2">
                       <Activity className="h-4.5 w-4.5 text-[#F4C455]" />
-                      Real-Time Traffic Telemetry logs
+                      Real-Time Traffic Protection Log
                     </h4>
                     <span className="text-[8px] text-[#A78E84] font-mono font-black uppercase bg-[#FCFAF6] border border-[#744D2B]/20 px-2.5 py-1 rounded-full">
-                      Node sync active
+                      Safety Shield Active
                     </span>
                   </div>
 
@@ -1675,7 +1792,7 @@ export default function Home() {
                               : "bg-[#FEF9E7] border-[#E25252] text-[#E25252]"
                           }`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                             <span className="text-[#A78E84] text-[8px] font-black">{log.timestamp || "Just now"}</span>
                             <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black border-2 ${
                               log.status === "valid" 
@@ -1716,7 +1833,7 @@ export default function Home() {
                     <div className="flex items-center gap-2">
                       <Code className="h-5 w-5 text-[#F4C455]" />
                       <h4 className="text-xs font-black uppercase tracking-wider text-[#744D2B]">
-                        Developer Webhook Payload Broadcaster (Supabase Live)
+                        Live Safety Alert Ledger
                       </h4>
                     </div>
                     <span className="bg-[#FCFAF6] text-[#7FB3D5] border-2 border-[#744D2B]/20 text-[8px] font-mono font-black px-2.5 py-0.5 rounded-full">
@@ -1725,7 +1842,7 @@ export default function Home() {
                   </div>
 
                   <p className="text-xs text-[#8E7368] leading-relaxed font-bold">
-                    Real-time list of anomalous bot IPs flagged by the AI Oracle Node and stored in the `ip_blacklist` table inside the `adsplit` schema on Supabase:
+                    Here is the real-time record of bot attacks blocked by the security guard, completely saved and transparent:
                   </p>
 
                   <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
@@ -1748,7 +1865,7 @@ export default function Home() {
                       ))
                     ) : (
                       <div className="text-center py-12 text-[#A78E84] font-mono italic text-xs font-bold">
-                        No bot IPs blacklisted yet. Trigger click fraud simulation to block.
+                        No security threats logged yet. Try triggering the spam simulator to see the security guard in action.
                       </div>
                     )}
                   </div>
@@ -1758,10 +1875,10 @@ export default function Home() {
                 <div className="blueprint-panel p-6 space-y-4 bg-white">
                   <h4 className="text-xs font-black uppercase tracking-wider text-[#744D2B] flex items-center gap-2">
                     <Terminal className="h-5 w-5 text-[#F4C455]" />
-                    AdRevenueSplitter.sol Explorer
+                    Safe Ad Chest Controller
                   </h4>
                   <p className="text-xs text-[#8E7368] leading-relaxed font-bold">
-                    Enter your deployed AdRevenueSplitter contract address to sync parameters and read transactions directly from the Arc L1 RPC:
+                    Sync your campaign chest address to reload its parameters and transactions directly from the network:
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-3 font-mono text-xs">
@@ -1775,7 +1892,7 @@ export default function Home() {
                       onClick={syncAllData}
                       className="btn-solid-dark py-3 px-5 text-xs cursor-pointer"
                     >
-                      Reload Ledger
+                      Sync Records
                     </button>
                   </div>
                 </div>
@@ -1797,7 +1914,7 @@ export default function Home() {
               <>
                 <div className="blueprint-panel p-5 bg-white space-y-2">
                   <div className="flex justify-between items-center text-[#A78E84] font-black text-[8px] uppercase tracking-wider font-mono">
-                    <span>Web2 Fee Cuts saved</span>
+                    <span>Ad Budget Saved</span>
                     <BarChart3 className="h-4.5 w-4.5 text-[#F4C455]" />
                   </div>
                   <span className="text-lg font-black text-[#744D2B] block font-mono leading-none">
@@ -1806,26 +1923,26 @@ export default function Home() {
                   <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden border-2 border-[#744D2B]/10">
                     <div className="h-full bg-[#F4C455]" style={{ width: "32%" }}></div>
                   </div>
-                  <span className="block text-[8px] text-[#A78E84] font-black font-mono uppercase">Saved 32% platform cuts</span>
+                  <span className="block text-[8px] text-[#A78E84] font-black font-mono uppercase">Cut Web2 Intermediary Fees</span>
                 </div>
 
                 <div className="blueprint-panel p-5 bg-white space-y-2">
                   <div className="flex justify-between items-center text-[#A78E84] font-black text-[8px] uppercase tracking-wider font-mono">
-                    <span>Settlement Speed</span>
+                    <span>Payment Speed</span>
                     <RefreshCw className="h-4.5 w-4.5 text-[#F4C455]" />
                   </div>
                   <span className="text-lg font-black text-[#744D2B] block font-mono leading-none">
-                    3.24M x
+                    Instant
                   </span>
                   <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden border-2 border-[#744D2B]/10">
                     <div className="h-full bg-[#35C7A4]" style={{ width: "100%" }}></div>
                   </div>
-                  <span className="block text-[8px] text-[#A78E84] font-black font-mono uppercase">0.8s vs 30-day delays</span>
+                  <span className="block text-[8px] text-[#A78E84] font-black font-mono uppercase">Instant vs 30-day delays</span>
                 </div>
 
                 <div className="blueprint-panel p-5 bg-white space-y-2">
                   <div className="flex justify-between items-center text-[#A78E84] font-black text-[8px] uppercase tracking-wider font-mono">
-                    <span>Traffic Authenticity</span>
+                    <span>Traffic Security</span>
                     <ShieldCheck className="h-4.5 w-4.5 text-[#F4C455]" />
                   </div>
                   <span className="text-lg font-black text-[#744D2B] block font-mono leading-none">
@@ -1834,7 +1951,7 @@ export default function Home() {
                   <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden border-2 border-[#744D2B]/10">
                     <div className="h-full bg-[#7FB3D5]" style={{ width: `${totalOrganicRatio}%` }}></div>
                   </div>
-                  <span className="block text-[8px] text-[#A78E84] font-black font-mono uppercase">Verified Organic clicks</span>
+                  <span className="block text-[8px] text-[#A78E84] font-black font-mono uppercase">Genuine reader clicks</span>
                 </div>
               </>
             )}
@@ -1845,11 +1962,12 @@ export default function Home() {
         {/* COLUMN 3: Right Sidebar Telemetry */}
         <div className="space-y-8">
           
+          {renderOnboardingAssistant()}
+
           {/* Mock NookPhone Quick Access Apps Grid (Inspiration style button mockup) */}
           <div className="blueprint-panel p-6 bg-[#FEFAF4] border-4 border-[#744D2B] rounded-[32px] space-y-5 shadow-[0_8px_0_rgba(116,77,43,0.1)]">
             <div className="border-b-3 border-[#744D2B]/10 pb-3 flex items-center justify-between text-[#744D2B]">
               <span className="text-[10px] font-mono font-black uppercase tracking-wider">Quick Desk Applet</span>
-              <span className="text-xs">📱</span>
             </div>
 
             {/* 3x3 App Icons Grid */}
@@ -1862,7 +1980,7 @@ export default function Home() {
                 <div className="h-12 w-12 bg-[#B28DFF] text-white border-3 border-[#744D2B] rounded-2xl flex items-center justify-center shadow-[0_4px_0_#744D2B] group-hover:translate-y-0.5 group-hover:shadow-[0_2px_0_#744D2B] transition-all">
                   <Camera className="h-6 w-6" />
                 </div>
-                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Sandbox</span>
+                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Preview</span>
               </button>
 
               <button 
@@ -1872,7 +1990,7 @@ export default function Home() {
                 <div className="h-12 w-12 bg-[#7FB3D5] text-white border-3 border-[#744D2B] rounded-2xl flex items-center justify-center shadow-[0_4px_0_#744D2B] group-hover:translate-y-0.5 group-hover:shadow-[0_2px_0_#744D2B] transition-all">
                   <Hammer className="h-6 w-6" />
                 </div>
-                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Escrows</span>
+                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Office</span>
               </button>
 
               <button 
@@ -1882,7 +2000,7 @@ export default function Home() {
                 <div className="h-12 w-12 bg-[#FAD7A0] text-[#744D2B] border-3 border-[#744D2B] rounded-2xl flex items-center justify-center shadow-[0_4px_0_#744D2B] group-hover:translate-y-0.5 group-hover:shadow-[0_2px_0_#744D2B] transition-all">
                   <ShieldCheck className="h-6 w-6" />
                 </div>
-                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Oracle</span>
+                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Shields</span>
               </button>
 
               <button 
@@ -1892,7 +2010,7 @@ export default function Home() {
                 <div className="h-12 w-12 bg-[#FEF9E7] text-[#744D2B] border-3 border-[#744D2B] rounded-2xl flex items-center justify-center shadow-[0_4px_0_#744D2B] group-hover:translate-y-0.5 group-hover:shadow-[0_2px_0_#744D2B] transition-all">
                   <Code className="h-6 w-6" />
                 </div>
-                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Webhooks</span>
+                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">History</span>
               </button>
 
               <button 
@@ -1902,7 +2020,7 @@ export default function Home() {
                 <div className="h-12 w-12 bg-[#35C7A4] text-white border-3 border-[#744D2B] rounded-2xl flex items-center justify-center shadow-[0_4px_0_#744D2B] group-hover:translate-y-0.5 group-hover:shadow-[0_2px_0_#744D2B] transition-all">
                   <Compass className="h-6 w-6" />
                 </div>
-                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Help Docs</span>
+                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Hand Guide</span>
               </button>
 
               <button 
@@ -1912,7 +2030,7 @@ export default function Home() {
                 <div className="h-12 w-12 bg-[#E25252] text-white border-3 border-[#744D2B] rounded-2xl flex items-center justify-center shadow-[0_4px_0_#744D2B] group-hover:translate-y-0.5 group-hover:shadow-[0_2px_0_#744D2B] transition-all">
                   <Wallet className="h-6 w-6" />
                 </div>
-                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Connect</span>
+                <span className="text-[#8E7368] uppercase text-[8px] leading-tight mt-1 truncate max-w-full">Link Wallet</span>
               </button>
 
             </div>
@@ -1921,7 +2039,7 @@ export default function Home() {
           {/* Island Settings Control Box (Yellow Panel matching the right-hand panel of image) */}
           <div className="blueprint-panel p-6 bg-[#F4C455] border-4 border-[#744D2B] rounded-[32px] space-y-5 shadow-[0_8px_0_rgba(116,77,43,0.12)] select-none">
             <div className="border-b-3 border-[#744D2B]/20 pb-3 flex items-center justify-between text-[#744D2B]">
-              <span className="text-xs font-black uppercase tracking-wider">Gate Settings</span>
+              <span className="text-xs font-black uppercase tracking-wider">Desk Configuration</span>
               <Settings className="h-4.5 w-4.5" />
             </div>
 
@@ -1929,7 +2047,7 @@ export default function Home() {
             <div className="space-y-4 text-xs font-extrabold text-[#744D2B]">
               
               <div className="space-y-1.5">
-                <label className="text-[9px] text-[#744D2B]/75 uppercase block tracking-wider font-mono">Select Ordinance</label>
+                <label className="text-[9px] text-[#744D2B]/75 uppercase block tracking-wider font-mono">Island Theme Style</label>
                 <select className="w-full px-4 py-2.5 bg-white border-3 border-[#744D2B] rounded-full text-[#744D2B] font-bold outline-none cursor-pointer">
                   <option>Cozy Shared Payouts</option>
                   <option>Night Owl Settlement</option>
@@ -1965,12 +2083,12 @@ export default function Home() {
                 }`}>
                   {allowVisitors && <span className="text-white text-xs">✓</span>}
                 </div>
-                <span className="uppercase text-[10px] tracking-wide font-mono">Allow External Visitor Oracles</span>
+                <span className="uppercase text-[10px] tracking-wide font-mono">Allow External Viewers</span>
               </label>
 
               {/* CCTP Crosschain Bridge Inline Widget inside right yellow block */}
               <div className="pt-2 border-t-3 border-[#744D2B]/15 space-y-3.5">
-                <span className="block text-[8px] text-[#744D2B]/70 uppercase tracking-widest font-mono font-black">Circle CCTP Crosschain Bridge</span>
+                <span className="block text-[8px] text-[#744D2B]/70 uppercase tracking-widest font-mono font-black">Teleport Funds from Other Chains</span>
                 
                 <form onSubmit={handleCCTPBridge} className="space-y-3 font-mono text-[10px]">
                   <div className="grid grid-cols-2 gap-2">
@@ -1999,7 +2117,7 @@ export default function Home() {
                     disabled={bridgeActive}
                     className="w-full py-2.5 bg-white hover:bg-gray-50 border-3 border-[#744D2B] text-[#744D2B] font-bold rounded-full shadow-[0_3px_0_#744D2B] hover:translate-y-0.5 hover:shadow-[0_1.5px_0_#744D2B] active:translate-y-1 active:shadow-none transition-all text-xs uppercase cursor-pointer"
                   >
-                    {bridgeActive ? "Attesting..." : `Bridge to Arc`}
+                    {bridgeActive ? "Teleporting..." : `Teleport Digital Dollars`}
                   </button>
                 </form>
               </div>
@@ -2125,28 +2243,86 @@ export default function Home() {
 
             <div className="flex items-center gap-2 border-b-3 border-[#744D2B]/10 pb-3">
               <span className="text-xl">🍃</span>
-              <h3 className="text-base font-black text-[#744D2B] uppercase">Island Help Guide</h3>
+              <h3 className="text-base font-black text-[#744D2B] uppercase">Cozy Desk Manual</h3>
             </div>
 
-            <div className="text-xs text-[#8E7368] space-y-3 leading-relaxed font-bold">
-              <p>
-                <strong>Welcome to AdSplit!</strong> Here is how you can manage your autonomous ad split system like a true island representative:
-              </p>
-              <ul className="list-disc pl-5 space-y-2">
-                <li>
-                  <span className="text-[#744D2B]">Connect Wallet:</span> Use the header button to link MetaMask on the Arc Testnet. Gas is sponsored in native-gas USDC!
-                </li>
-                <li>
-                  <span className="text-[#744D2B]">Advertiser Node:</span> Create active construction projects (escrow campaigns) locking USDC on-chain.
-                </li>
-                <li>
-                  <span className="text-[#744D2B]">Creator Sandbox:</span> Click simulated sponsored banners inside creative blogs to witness sub-second block settlements.
-                </li>
-                <li>
-                  <span className="text-[#744D2B]">Click Oracle:</span> Trigger bot spams to test the cryptographic Shield protecting campaign escrows.
-                </li>
-              </ul>
+            {/* Cozy Tab Switcher */}
+            <div className="grid grid-cols-2 gap-2 text-center text-[10px] font-black uppercase tracking-wider font-mono">
+              <button 
+                onClick={() => setHelpTab("user")}
+                className={`py-2 px-3 border-3 border-[#744D2B] rounded-xl transition-all cursor-pointer ${
+                  helpTab === "user" 
+                    ? "bg-[#F4C455] text-[#744D2B] shadow-[0_2.5px_0_#744D2B] translate-y-[-0.5px]" 
+                    : "bg-white text-[#8E7368] hover:bg-gray-50 border-[#744D2B]/40"
+                }`}
+              >
+                🍃 User Guide
+              </button>
+              <button 
+                onClick={() => setHelpTab("builder")}
+                className={`py-2 px-3 border-3 border-[#744D2B] rounded-xl transition-all cursor-pointer ${
+                  helpTab === "builder" 
+                    ? "bg-[#7FB3D5] text-white shadow-[0_2.5px_0_#744D2B] translate-y-[-0.5px]" 
+                    : "bg-white text-[#8E7368] hover:bg-gray-50 border-[#744D2B]/40"
+                }`}
+              >
+                🛠️ Builder SDK
+              </button>
             </div>
+
+            {helpTab === "user" ? (
+              <div className="text-xs text-[#8E7368] space-y-3 leading-relaxed font-bold">
+                <p>
+                  <strong>Welcome to AdSplit!</strong> Here is how to set up your cozy ad campaigns and instant click payouts without any complex steps:
+                </p>
+                <ul className="list-disc pl-5 space-y-2 font-sans font-extrabold">
+                  <li>
+                    <span className="text-[#744D2B]">Link Wallet:</span> Use the top button to link your secure web wallet. Sponsored delivery means transaction fees are 100% free!
+                  </li>
+                  <li>
+                    <span className="text-[#744D2B]">Ad Spender Office:</span> Fill up campaign chests with digital cash (USDC) to sponsor clicks.
+                  </li>
+                  <li>
+                    <span className="text-[#744D2B]">Live Ad Preview:</span> Click sponsored ad banners inside sample blogs to see funds teleport instantly to the creator's wallet.
+                  </li>
+                  <li>
+                    <span className="text-[#744D2B]">Anti-Fraud Shields:</span> Trigger fake bot clicks to watch the security guard block spam traffic in real time.
+                  </li>
+                </ul>
+              </div>
+            ) : (
+              <div className="text-xs text-[#8E7368] space-y-3.5 leading-relaxed font-mono">
+                <p className="font-bold font-sans">
+                  Integrate instant, fraud-proof digital dollar splits into any web page in 3 lines of code!
+                </p>
+                <div className="space-y-1">
+                  <span className="block text-[8px] text-[#A78E84] font-black uppercase tracking-wider">Option A: HTML Widget Banner</span>
+                  <pre className="p-2.5 bg-[#FEFAF4] border-2 border-[#744D2B]/25 rounded-xl text-[9px] text-[#744D2B] overflow-x-auto select-all leading-normal">
+{`<div id="adsplit-banner" data-campaign="0xad...78"></div>
+<script src="https://cdn.adsplit.org/v1.js" async></script>`}
+                  </pre>
+                </div>
+                <div className="space-y-1">
+                  <span className="block text-[8px] text-[#A78E84] font-black uppercase tracking-wider">Option B: Cozy React Component</span>
+                  <pre className="p-2.5 bg-[#FEFAF4] border-2 border-[#744D2B]/25 rounded-xl text-[9px] text-[#744D2B] overflow-x-auto select-all leading-normal">
+{`import { AdSplitBanner } from '@adsplit/react';
+
+<AdSplitBanner 
+  campaignId="0xad0001bc93"
+  splitShare={85} // 85% to Creator
+/>`}
+                  </pre>
+                </div>
+                <div className="space-y-1">
+                  <span className="block text-[8px] text-[#A78E84] font-black uppercase tracking-wider">Option C: Teleport Telemetry Listener</span>
+                  <pre className="p-2.5 bg-[#FEFAF4] border-2 border-[#744D2B]/25 rounded-xl text-[9px] text-[#744D2B] overflow-x-auto select-all leading-normal">
+{`window.addEventListener('adsplit-payout', (e) => {
+  console.log('Payment Teleported:', e.detail);
+});`}
+                  </pre>
+                </div>
+              </div>
+            )}
 
             <button 
               onClick={() => setShowHelpModal(false)}
