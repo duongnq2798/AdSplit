@@ -14,7 +14,7 @@ import { keccak256, encodePacked } from 'viem';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { walletId, contractAddress, abiMethod, args, telemetryPayload } = body;
+    const { walletId, contractAddress, abiMethod, args, telemetryPayload, zkProof } = body;
 
     const apiKey = process.env.NEXT_PUBLIC_CIRCLE_API_KEY || 'sandbox_key';
     const entitySecret = process.env.NEXT_PUBLIC_CIRCLE_ENTITY_SECRET || '';
@@ -160,8 +160,12 @@ export async function POST(request: Request) {
         }
       }
 
-      sponsoredArgs = [campaignId, clickFingerprint, signatures];
-      abiFunctionSignature = 'recordEngagement(bytes32,bytes32,bytes[])';
+      const a = zkProof?.a || ["0", "0"];
+      const b = zkProof?.b || [["0", "0"], ["0", "0"]];
+      const c = zkProof?.c || ["0", "0"];
+
+      sponsoredArgs = [campaignId, clickFingerprint, signatures, a, b, c];
+      abiFunctionSignature = 'recordEngagement(bytes32,bytes32,bytes[],uint256[2],uint256[2][2],uint256[2])';
     }
 
     // 2. If Entity Secret is configured, run secure transaction via Developer-Controlled Wallets SDK
@@ -177,10 +181,13 @@ export async function POST(request: Request) {
         contractAddress,
         abiFunctionSignature,
         abiParameters: sponsoredArgs.map((arg: any) => {
-          if (Array.isArray(arg)) {
-            return arg.map((item: any) => item.toString());
-          }
-          return arg.toString();
+          const deepMap = (item: any): any => {
+            if (Array.isArray(item)) {
+              return item.map(deepMap);
+            }
+            return item.toString();
+          };
+          return deepMap(arg);
         }),
         fee: {
           type: 'level',
@@ -207,7 +214,15 @@ export async function POST(request: Request) {
         walletId,
         contractAddress,
         abiMethod: abiFunctionSignature,
-        abiParameters: sponsoredArgs,
+        abiParameters: sponsoredArgs.map((arg: any) => {
+          const deepMap = (item: any): any => {
+            if (Array.isArray(item)) {
+              return item.map(deepMap);
+            }
+            return item.toString();
+          };
+          return deepMap(arg);
+        }),
         feeLevel: 'MEDIUM',
         sponsorGas: true,
       }),

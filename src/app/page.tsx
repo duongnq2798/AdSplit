@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { TelemetryCollector } from "@/utils/telemetry-collector";
+import { generateTelemetryProof } from "@/utils/zk-proof-generator";
 import { 
   createPublicClient, 
   createWalletClient, 
@@ -1234,8 +1235,36 @@ export default function Home() {
 
       // 2. Call Circle Relayer to execute transaction GASLESS on Arc Testnet
       let telemetryPayload = "";
+      let zkProof = null;
       if (telemetryCollectorRef.current) {
         telemetryPayload = await telemetryCollectorRef.current.getEncryptedPayload('adsplit_secret_telemetry_key_32bytes');
+        const raw = telemetryCollectorRef.current.getRawData();
+        const movesX = raw.mouseMoves.map(m => m.x);
+        const movesY = raw.mouseMoves.map(m => m.y);
+        while (movesX.length < 10) movesX.push(movesX[movesX.length - 1] || 0);
+        while (movesY.length < 10) movesY.push(movesY[movesY.length - 1] || 0);
+        const last10X = movesX.slice(-10);
+        const last10Y = movesY.slice(-10);
+        const delay = raw.clicks.length > 0 ? (raw.clicks[0].t - raw.loadTime) : (Date.now() - raw.loadTime);
+        const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+        const isHeadless = typeof navigator !== 'undefined' ? (!!navigator.webdriver || userAgent.includes("HeadlessChrome")) : false;
+        
+        try {
+          zkProof = await generateTelemetryProof(
+            {
+              mouseX: last10X,
+              mouseY: last10Y,
+              clickDelay: delay,
+              userAgent,
+              isHeadless
+            },
+            campaignId,
+            keccak256(stringToBytes(clickId))
+          );
+        } catch (proofErr: any) {
+          console.warn("Local ZK Proof generation failed: ", proofErr);
+          throw new Error(proofErr.message || "Failed ZK telemetry validation");
+        }
       }
 
       const txResult = await circleService.sponsorGaslessTransaction(
@@ -1243,7 +1272,8 @@ export default function Home() {
         contractAddress,
         "recordEngagement",
         [campaignId, keccak256(stringToBytes(clickId))],
-        telemetryPayload
+        telemetryPayload,
+        zkProof
       );
 
       if (txResult.error) {

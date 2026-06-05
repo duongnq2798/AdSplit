@@ -36,10 +36,11 @@ export class CircleIntegrationService {
     contractAddress: string,
     abiMethod: string,
     args: any[],
-    telemetryPayload?: string
+    telemetryPayload?: string,
+    zkProof?: any
   ) {
     try {
-      console.log('Dispatching sponsored transaction via secure backend API route...');
+      console.log('Dispatching sponsored transaction via secure backend API route with ZK proof...');
       const response = await fetch('/api/sponsor', {
         method: 'POST',
         headers: {
@@ -51,6 +52,7 @@ export class CircleIntegrationService {
           abiMethod,
           args,
           telemetryPayload,
+          zkProof,
         }),
       });
 
