@@ -1,7 +1,5 @@
--- Supabase SQL Schema for AdSplit Protocol
--- Schema: adsplit (isolated custom schema for security and multi-tenant isolation)
--- Created: 2026-05-22
--- Updated: 2026-06-02
+-- Migration 01: Set up the custom adsplit schema, tables, indexes, and RLS policies
+-- Created: 2026-06-02
 
 -- Create schema adsplit if not exists
 CREATE SCHEMA IF NOT EXISTS adsplit;
@@ -57,7 +55,7 @@ CREATE TABLE IF NOT EXISTS adsplit.ip_blacklist (
     blocked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Add indexes on active status and IP address for performance
+-- Add index on campaign active status for performance
 CREATE INDEX IF NOT EXISTS idx_campaigns_active ON adsplit.campaigns(active);
 CREATE INDEX IF NOT EXISTS idx_click_logs_ip ON adsplit.click_logs(ip_address);
 
@@ -66,7 +64,7 @@ GRANT ALL ON ALL TABLES IN SCHEMA adsplit TO postgres, service_role;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA adsplit TO anon, authenticated;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA adsplit TO anon, authenticated, service_role;
 
--- Enable Row Level Security (RLS)
+-- Enable RLS
 ALTER TABLE adsplit.campaigns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE adsplit.campaign_splits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE adsplit.click_logs ENABLE ROW LEVEL SECURITY;
