@@ -21,7 +21,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "viem": "^2.50.4",
-    "wagmi": "^3.6.15"
+    "wagmi": "^3.6.15",
+    "@circle-fin/w3s-pw-web-sdk": "^1.1.11"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.2",

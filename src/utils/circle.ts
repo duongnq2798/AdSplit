@@ -35,7 +35,8 @@ export class CircleIntegrationService {
     walletId: string,
     contractAddress: string,
     abiMethod: string,
-    args: any[]
+    args: any[],
+    telemetryPayload?: string
   ) {
     try {
       console.log('Dispatching sponsored transaction via secure backend API route...');
@@ -49,6 +50,7 @@ export class CircleIntegrationService {
           contractAddress,
           abiMethod,
           args,
+          telemetryPayload,
         }),
       });
 
