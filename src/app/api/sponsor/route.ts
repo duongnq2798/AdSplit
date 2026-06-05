@@ -30,7 +30,40 @@ export async function POST(request: Request) {
     if (abiMethod === 'recordEngagement' || abiMethod.startsWith('recordEngagement(')) {
       const campaignId = args[0];
       const clickFingerprint = args[1];
-      console.log(`[API Sponsor] Validating telemetry for campaign ${campaignId} from IP ${ip}...`);
+
+      // Origin domain validation for security
+      const referer = request.headers.get('referer') || '';
+      const origin = request.headers.get('origin') || '';
+      let callerDomain = 'localhost';
+      try {
+        if (referer) {
+          callerDomain = new URL(referer).hostname;
+        } else if (origin) {
+          callerDomain = new URL(origin).hostname;
+        }
+      } catch (e) {
+        console.warn('[API Sponsor] Failed to parse referer/origin hostname:', e);
+      }
+
+      console.log(`[API Sponsor] Validating telemetry for campaign ${campaignId} from IP ${ip} (Domain: ${callerDomain})...`);
+
+      const { data: domainRecord, error: domainErr } = await supabase
+        .from('registered_domains')
+        .select('domain')
+        .eq('domain', callerDomain)
+        .maybeSingle();
+
+      if (domainErr) {
+        console.error('[API Sponsor] Database domain verification error:', domainErr);
+      }
+
+      if (!domainRecord && callerDomain !== 'localhost' && callerDomain !== '127.0.0.1') {
+        console.warn(`[API Sponsor] Unauthorized origin domain: ${callerDomain}`);
+        return NextResponse.json({ 
+          error: `Domain '${callerDomain}' is not registered with AdSplit. Only whitelisted publisher sites can load ads.`,
+          success: false 
+        }, { status: 403 });
+      }
 
       const telemetryResult = await verifyTelemetry(telemetryPayload || '', ip, campaignId);
       

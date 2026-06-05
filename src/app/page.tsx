@@ -81,7 +81,8 @@ const CONTRACT_ABI = [
       { internalType: "uint256", name: "_budget", type: "uint256" },
       { internalType: "uint256", name: "_costPerClick", type: "uint256" },
       { internalType: "address[]", name: "_recipients", type: "address[]" },
-      { internalType: "uint256[]", name: "_shares", type: "uint256[]" }
+      { internalType: "uint256[]", name: "_shares", type: "uint256[]" },
+      { internalType: "address", name: "_affiliate", type: "address" }
     ],
     name: "createCampaign",
     outputs: [{ internalType: "bytes32", name: "", type: "bytes32" }],
@@ -171,12 +172,14 @@ const ERC20_ABI = [
   }
 ] as const;
 
+import PublisherAnalytics from "@/components/PublisherAnalytics";
+
 // Arc Network Addresses
 const DEFAULT_CONTRACT_ADDRESS = "0xE75D12e1E29370A0346A25D5ef371B2B990a3c91";
 const advertiserWallet = "0xd91455cCe706509F67cD6303Cec089B5F319D72A";
 const oracleNodeAddress = "0xCa2d2f677CD6303cec089b5f319d72A089B5F319";
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"advertiser" | "creator" | "oracle" | "contract">("advertiser");
+  const [activeTab, setActiveTab] = useState<"advertiser" | "creator" | "publisher" | "oracle" | "contract">("advertiser");
 
   const telemetryCollectorRef = useRef<TelemetryCollector | null>(null);
 
@@ -293,6 +296,7 @@ export default function Home() {
   const [newCampaignBudget, setNewCampaignBudget] = useState("2");
   const [newCampaignCPC, setNewCampaignCPC] = useState("0.02");
   const [newCreatorShare, setNewCreatorShare] = useState(85);
+  const [newCampaignAffiliate, setNewCampaignAffiliate] = useState("");
   
   // CCTP Bridge Form
   const [bridgeAmount, setBridgeAmount] = useState("2");
@@ -564,7 +568,7 @@ export default function Home() {
     }
   };
 
-  const handleTabChange = (newTab: "advertiser" | "creator" | "oracle" | "contract") => {
+  const handleTabChange = (newTab: "advertiser" | "creator" | "publisher" | "oracle" | "contract") => {
     setIsLoadingData(true);
     setActiveTab(newTab);
     setMobileMenuOpen(false);
@@ -633,6 +637,7 @@ export default function Home() {
         await new Promise(resolve => setTimeout(resolve, 1200)); // Simulate processing delay
 
         // Save to Supabase database matching the schema "adsplit"
+        const hasAffiliate = newCampaignAffiliate && newCampaignAffiliate.trim().startsWith("0x");
         const newCampaign: DbCampaign = {
           id: campaignId,
           title: newCampaignTitle,
@@ -642,15 +647,20 @@ export default function Home() {
           cost_per_click: cpcNum,
           total_clicks: 0,
           active: true,
-          platform_share: 300,
-          distributor_share: 1000
+          platform_share: hasAffiliate ? 500 : 300,
+          distributor_share: 1000,
+          affiliate: hasAffiliate ? newCampaignAffiliate.trim() : undefined
         };
 
-        const dbSplits = [
-          { creator_address: userAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: leadShare }
-        ];
-        if (coAuthorShare > 0) {
-          dbSplits.push({ creator_address: advertiserWallet, creator_name: "Co-Author", share_bps: coAuthorShare });
+        const dbSplits = [];
+        if (hasAffiliate) {
+          dbSplits.push({ creator_address: userAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: 8000 });
+          dbSplits.push({ creator_address: newCampaignAffiliate.trim(), creator_name: "Affiliate Referral", share_bps: 1500 });
+        } else {
+          dbSplits.push({ creator_address: userAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: leadShare });
+          if (coAuthorShare > 0) {
+            dbSplits.push({ creator_address: advertiserWallet, creator_name: "Co-Author", share_bps: coAuthorShare });
+          }
         }
         dbSplits.push({ creator_address: oracleNodeAddress, creator_name: "Distributor Network", share_bps: distributorShare });
 
@@ -784,6 +794,9 @@ export default function Home() {
       contractRecipients.push(oracleNodeAddress as `0x${string}`);
       contractShares.push(BigInt(distributorShare));
 
+      const hasAffiliate = newCampaignAffiliate && newCampaignAffiliate.trim().startsWith("0x");
+      const affiliateAddressStr = (hasAffiliate ? newCampaignAffiliate.trim() : "0x0000000000000000000000000000000000000000") as `0x${string}`;
+
       const { request } = await publicClient.simulateContract({
         account: userAddress as `0x${string}`,
         address: formattedContractAddress,
@@ -793,7 +806,8 @@ export default function Home() {
           parseUnits(newCampaignBudget, 6), // 6 decimals for ERC-20 USDC
           parseUnits(newCampaignCPC, 6),
           contractRecipients,
-          contractShares
+          contractShares,
+          affiliateAddressStr
         ]
       });
 
@@ -839,16 +853,20 @@ export default function Home() {
         cost_per_click: cpcNum,
         total_clicks: 0,
         active: true,
-        platform_share: 300,
-        distributor_share: 1000
+        platform_share: hasAffiliate ? 500 : 300,
+        distributor_share: 1000,
+        affiliate: hasAffiliate ? newCampaignAffiliate.trim() : undefined
       };
 
-      const dbSplits = [
-        { creator_address: userAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: leadShare }
-      ];
-
-      if (coAuthorShare > 0) {
-        dbSplits.push({ creator_address: advertiserWallet, creator_name: "Co-Author", share_bps: coAuthorShare });
+      const dbSplits = [];
+      if (hasAffiliate) {
+        dbSplits.push({ creator_address: userAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: 8000 });
+        dbSplits.push({ creator_address: newCampaignAffiliate.trim(), creator_name: "Affiliate Referral", share_bps: 1500 });
+      } else {
+        dbSplits.push({ creator_address: userAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: leadShare });
+        if (coAuthorShare > 0) {
+          dbSplits.push({ creator_address: advertiserWallet, creator_name: "Co-Author", share_bps: coAuthorShare });
+        }
       }
 
       dbSplits.push({ creator_address: oracleNodeAddress, creator_name: "Distributor Network", share_bps: distributorShare });
@@ -1449,6 +1467,25 @@ export default function Home() {
             </>
           )}
 
+          {activeTab === "publisher" && (
+            <>
+              <p>
+                <strong>Welcome to the DSP Publisher Affiliate Portal!</strong> Here, publishers can generate ad tags, monitor splits, and manage domain approvals.
+              </p>
+              <p>
+                When active affiliate campaigns get clicks, the revenue splits automatically: 80% to Creator, 15% to Affiliate, and 5% to Platform.
+              </p>
+              <div className="bg-[#FEF9E7] border-2 border-[#F4C455]/40 rounded-2xl p-3 space-y-1.5">
+                <span className="block text-[8px] text-[#744D2B] font-black uppercase tracking-wider">Publisher Guide:</span>
+                <ul className="list-disc pl-4 text-[10px] space-y-1">
+                  <li>Generate a custom HTML script using the Embed Tool.</li>
+                  <li>Whitelist your external hostname domain to enable secure click validation.</li>
+                  <li>Track impressions, clicks, CTR, and earned referral splits.</li>
+                </ul>
+              </div>
+            </>
+          )}
+
           {activeTab === "oracle" && (
             <>
               <p>
@@ -1582,6 +1619,18 @@ export default function Home() {
               >
                 <Globe className="h-4 w-4" />
                 Live Ad Preview
+              </button>
+
+              <button 
+                onClick={() => handleTabChange("publisher")}
+                className={`px-5 py-2.5 rounded-full border-3 border-[#744D2B] transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === "publisher" 
+                    ? "bg-[#FF9F80] text-white shadow-[0_4px_0_#744D2B] -translate-y-0.5" 
+                    : "bg-white text-[#8E7368] shadow-[0_2px_0_#744D2B] hover:bg-gray-50 hover:-translate-y-0.5"
+                }`}
+              >
+                <Code className="h-4 w-4" />
+                Publisher Dashboard
               </button>
 
               <button 
@@ -1873,6 +1922,23 @@ export default function Home() {
                           <span>Co-Author: {85 - newCreatorShare}%</span>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="space-y-1.5 font-mono">
+                      <label className="text-[9px] text-[#8E7368] font-extrabold uppercase block tracking-wider">
+                        Affiliate Referral Wallet Address (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 0x3C44Cd3570DE730c26841569B8100c8411905289"
+                        value={newCampaignAffiliate}
+                        onChange={(e) => setNewCampaignAffiliate(e.target.value)}
+                        className="w-full blueprint-input"
+                        disabled={isCreatingCampaign}
+                      />
+                      <span className="block text-[8px] text-[#A78E84] font-black uppercase leading-normal">
+                        💡 Setting an affiliate overrides standard splits: payouts split as 80% Creator, 15% Affiliate, 5% Platform.
+                      </span>
                     </div>
 
                     <div className="pt-2">
@@ -2213,6 +2279,24 @@ export default function Home() {
                   </div>
                 </div>
 
+              </div>
+            )}
+
+            {/* TAB: PUBLISHER PORTAL */}
+            {activeTab === "publisher" && (
+              <div className="space-y-8 animate-slide-up">
+                <div className="blueprint-panel bg-white p-6 space-y-6">
+                  <div className="border-b-3 border-[#744D2B]/10 pb-4">
+                    <h3 className="text-xs font-black text-[#744D2B] uppercase tracking-wider flex items-center gap-2">
+                      🍃 DSP Publisher Portal & Affiliate Center
+                    </h3>
+                    <p className="text-[10px] text-[#8E7368] font-bold uppercase tracking-wider">
+                      Earn passive income through ad referrals and split payments settled gaslessly
+                    </p>
+                  </div>
+                  
+                  <PublisherAnalytics campaigns={campaigns} userWallet={userAddress || advertiserWallet} />
+                </div>
               </div>
             )}
 
