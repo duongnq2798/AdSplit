@@ -122,7 +122,7 @@ describe("AdRevenueSplitter Zero-Knowledge Telemetry Verification", function () 
           b,
           c
         )
-      ).to.be.revertedWith("Invalid ZK proof");
+      ).to.be.revertedWithCustomError(splitter, "InvalidZKProof");
     });
   });
 

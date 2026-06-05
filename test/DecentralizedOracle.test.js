@@ -94,11 +94,11 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
     it("should restrict DON admin controls to owner", async function () {
       await expect(
         splitter.connect(advertiser).addOracleNode(oracle2.address)
-      ).to.be.revertedWith("Only owner can call");
+      ).to.be.revertedWithCustomError(splitter, "OnlyOwner");
 
       await expect(
         splitter.connect(advertiser).setOracleThreshold(2)
-      ).to.be.revertedWith("Only owner can call");
+      ).to.be.revertedWithCustomError(splitter, "OnlyOwner");
     });
   });
 
@@ -173,7 +173,7 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
           proofB,
           proofC
         )
-      ).to.be.revertedWith("Insufficient signatures");
+      ).to.be.revertedWithCustomError(splitter, "InsufficientSignatures");
     });
 
     it("should revert if duplicate signatures from the same oracle are provided", async function () {
@@ -192,7 +192,7 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
           proofB,
           proofC
         )
-      ).to.be.revertedWith("Duplicate signature");
+      ).to.be.revertedWithCustomError(splitter, "DuplicateSignature");
     });
 
     it("should revert if any signature is from an unauthorized signer", async function () {
@@ -212,7 +212,7 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
           proofB,
           proofC
         )
-      ).to.be.revertedWith("Invalid oracle signature");
+      ).to.be.revertedWithCustomError(splitter, "InvalidOracleSignature");
     });
   });
 });

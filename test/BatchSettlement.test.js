@@ -132,6 +132,6 @@ describe("AdRevenueSplitter Batch Micropayment Settlements (x402)", function () 
         [creator1.address],
         [ethers.parseUnits("1.5", 6)]
       )
-    ).to.be.revertedWith("Only authorized settler can call");
+    ).to.be.revertedWithCustomError(splitter, "OnlyOracleNode");
   });
 });

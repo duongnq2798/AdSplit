@@ -127,7 +127,7 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
 
       await expect(
         splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [signature], proofA, proofB, proofC)
-      ).to.be.revertedWith("Invalid oracle signature");
+      ).to.be.revertedWithCustomError(splitter, "InvalidOracleSignature");
     });
 
     it("should prevent duplicate uses of the same click fingerprint (double-spend protection)", async function () {
@@ -143,7 +143,7 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
       // Second click with same fingerprint reverts
       await expect(
         splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [signature], proofA, proofB, proofC)
-      ).to.be.revertedWith("Fingerprint already used");
+      ).to.be.revertedWithCustomError(splitter, "FingerprintAlreadyUsed");
     });
 
     it("should reject recordEngagement if campaign budget is exhausted", async function () {
@@ -166,7 +166,7 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
 
       await expect(
         splitter.connect(owner).recordEngagement(campaignId, nextFingerprint, [nextSig], proofA, proofB, proofC)
-      ).to.be.revertedWith("Campaign is not active");
+      ).to.be.revertedWithCustomError(splitter, "CampaignNotActive");
     });
 
     it("should support affiliate address splits with 80% Creator, 15% Affiliate, 5% Platform", async function () {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP.
  */
@@ -54,7 +56,7 @@ interface IVerifier {
  * @notice Decentralized Ad Escrow & Automated Multi-Recipient Revenue Splitter on Arc L1.
  * USDC is the native gas token, but we also interact with ERC-20 USDC (6 decimals).
  */
-contract AdRevenueSplitter {
+contract AdRevenueSplitter is ReentrancyGuard {
     
     IERC20 public immutable usdcToken;
     IERC4626 public yieldVault;
@@ -69,21 +71,59 @@ contract AdRevenueSplitter {
     uint256 public platformFeeBps = 300;         // 3.0% platform fee
     address public platformWallet;
     
+    // Custom Errors for Gas Optimization
+    error BudgetMustBeGreaterThanZero();
+    error CostPerClickMustBeGreaterThanZero();
+    error CostPerClickExceedsBudget();
+    error MismatchedRecipientsAndShares();
+    error RecipientRequired();
+    error InvalidRecipient();
+    error InvalidSharesSum();
+    error EscrowDepositFailed();
+    error ApproveFailed();
+    error DepositSlippageTooHigh();
+    error CampaignNotActive();
+    error CampaignBudgetExhausted();
+    error InsufficientSignatures();
+    error InvalidOracleSignature();
+    error DuplicateSignature();
+    error PlatformFeeTransferFailed();
+    error RecipientPaymentFailed();
+    error CreatorPaymentFailed();
+    error AffiliateFeeTransferFailed();
+    error WithdrawRefundFailed();
+    error OnlyAdvertiserCanWithdraw();
+    error InvalidAddress();
+    error AlreadyOracle();
+    error NotOracle();
+    error ThresholdMustBeGreaterThanZero();
+    error VaultWithdrawalFailed();
+    error VaultRedemptionFailed();
+    error OnlyOwner();
+    error OnlyOracleNode();
+    error BudgetTooLarge();
+    error CostPerClickTooLarge();
+    error FingerprintAlreadyUsed();
+    error InvalidZKProof();
+    error SignatureLengthInvalid();
+    error PlatformFeeBpsTooHigh();
+    error RefundFailed();
+
     struct SplitShare {
         address recipient;
-        uint256 shareBps; // In basis points (e.g. 4500 = 45%)
+        uint96 shareBps; // Packed: fits in single 256-bit slot with address recipient (160 bits)
     }
     
     struct Campaign {
         bytes32 campaignId;
-        address advertiser;
-        uint256 totalBudget;      // 6 decimals USDC
-        uint256 remainingBudget;  // 6 decimals USDC
-        uint256 costPerClick;     // 6 decimals USDC
-        uint256 totalClicks;
-        bool active;
-        uint256 vaultShares;      // shares allocated to the campaign in yieldVault
-        address affiliate;        // affiliate address for referral splits
+        address advertiser;       // 160 bits. Slot 1
+        bool active;              // 8 bits. Slot 1
+        uint64 totalClicks;       // 64 bits. Slot 1
+        uint128 totalBudget;      // 128 bits. Slot 2 (6 decimals USDC)
+        uint128 remainingBudget;  // 128 bits. Slot 2 (6 decimals USDC)
+        uint128 costPerClick;     // 128 bits. Slot 3 (6 decimals USDC)
+        uint128 vaultShares;      // 128 bits. Slot 3 (shares allocated in yieldVault)
+        address affiliate;        // 160 bits. Slot 4
     }
     
     // Mapping from campaignId to Campaign details
@@ -134,20 +174,20 @@ contract AdRevenueSplitter {
     event OracleThresholdUpdated(uint256 newThreshold);
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner can call");
+        if (msg.sender != owner) revert OnlyOwner();
         _;
     }
     
     modifier onlyOracle() {
-        require(isOracleNode[msg.sender], "Only fraud detection oracle can call");
+        if (!isOracleNode[msg.sender]) revert OnlyOracleNode();
         _;
     }
     
     constructor(address _usdcToken, address _oracleNode, address _platformWallet, address _yieldVault) {
-        require(_usdcToken != address(0), "Invalid token address");
-        require(_oracleNode != address(0), "Invalid oracle address");
-        require(_platformWallet != address(0), "Invalid platform wallet");
-        require(_yieldVault != address(0), "Invalid yield vault address");
+        if (_usdcToken == address(0)) revert InvalidAddress();
+        if (_oracleNode == address(0)) revert InvalidAddress();
+        if (_platformWallet == address(0)) revert InvalidAddress();
+        if (_yieldVault == address(0)) revert InvalidAddress();
         
         usdcToken = IERC20(_usdcToken);
         oracleNode = _oracleNode;
@@ -162,7 +202,7 @@ contract AdRevenueSplitter {
      * @notice Set the Oracle node address that reports fraud-free user engagements.
      */
     function setOracleNode(address _oracleNode) external onlyOwner {
-        require(_oracleNode != address(0), "Invalid address");
+        if (_oracleNode == address(0)) revert InvalidAddress();
         emit OracleUpdated(oracleNode, _oracleNode);
         isOracleNode[oracleNode] = false;
         oracleNode = _oracleNode;
@@ -173,8 +213,8 @@ contract AdRevenueSplitter {
      * @notice Add a new trusted oracle node.
      */
     function addOracleNode(address _node) external onlyOwner {
-        require(_node != address(0), "Invalid address");
-        require(!isOracleNode[_node], "Already oracle");
+        if (_node == address(0)) revert InvalidAddress();
+        if (isOracleNode[_node]) revert AlreadyOracle();
         isOracleNode[_node] = true;
         emit OracleNodeAdded(_node);
     }
@@ -183,7 +223,7 @@ contract AdRevenueSplitter {
      * @notice Remove a trusted oracle node.
      */
     function removeOracleNode(address _node) external onlyOwner {
-        require(isOracleNode[_node], "Not oracle");
+        if (!isOracleNode[_node]) revert NotOracle();
         isOracleNode[_node] = false;
         emit OracleNodeRemoved(_node);
     }
@@ -192,7 +232,7 @@ contract AdRevenueSplitter {
      * @notice Update the required quorum threshold for consensus.
      */
     function setOracleThreshold(uint256 _threshold) external onlyOwner {
-        require(_threshold > 0, "Threshold must be > 0");
+        if (_threshold == 0) revert ThresholdMustBeGreaterThanZero();
         oracleThreshold = _threshold;
         emit OracleThresholdUpdated(_threshold);
     }
@@ -201,7 +241,7 @@ contract AdRevenueSplitter {
      * @notice Set the platform revenue wallet.
      */
     function setPlatformWallet(address _platformWallet) external onlyOwner {
-        require(_platformWallet != address(0), "Invalid address");
+        if (_platformWallet == address(0)) revert InvalidAddress();
         emit PlatformWalletUpdated(platformWallet, _platformWallet);
         platformWallet = _platformWallet;
     }
@@ -210,7 +250,7 @@ contract AdRevenueSplitter {
      * @notice Set platform fee in basis points (e.g. 300 = 3%).
      */
     function setPlatformFeeBps(uint256 _bps) external onlyOwner {
-        require(_bps <= 1000, "Fee cannot exceed 10%");
+        if (_bps > 1000) revert PlatformFeeBpsTooHigh();
         emit PlatformFeeUpdated(platformFeeBps, _bps);
         platformFeeBps = _bps;
     }
@@ -219,7 +259,7 @@ contract AdRevenueSplitter {
      * @notice Set the yield vault address.
      */
     function setYieldVault(address _yieldVault) external onlyOwner {
-        require(_yieldVault != address(0), "Invalid yield vault address");
+        if (_yieldVault == address(0)) revert InvalidAddress();
         emit YieldVaultUpdated(address(yieldVault), _yieldVault);
         yieldVault = IERC4626(_yieldVault);
     }
@@ -228,7 +268,7 @@ contract AdRevenueSplitter {
      * @notice Set the ZK Verifier contract address.
      */
     function setVerifier(address _verifier) external onlyOwner {
-        require(_verifier != address(0), "Invalid verifier address");
+        if (_verifier == address(0)) revert InvalidAddress();
         emit VerifierUpdated(verifier, _verifier);
         verifier = _verifier;
     }
@@ -246,37 +286,40 @@ contract AdRevenueSplitter {
         address[] calldata _recipients,
         uint256[] calldata _shares,
         address _affiliate
-    ) external returns (bytes32) {
-        require(_budget > 0, "Budget must be greater than zero");
-        require(_costPerClick > 0, "Cost per click must be greater than zero");
-        require(_costPerClick <= _budget, "CPC cannot exceed total budget");
-        require(_recipients.length == _shares.length, "Mismatched recipients and shares");
-        require(_recipients.length > 0, "At least one recipient required");
+    ) external nonReentrant returns (bytes32) {
+        if (_budget == 0) revert BudgetMustBeGreaterThanZero();
+        if (_costPerClick == 0) revert CostPerClickMustBeGreaterThanZero();
+        if (_costPerClick > _budget) revert CostPerClickExceedsBudget();
+        if (_recipients.length != _shares.length) revert MismatchedRecipientsAndShares();
+        if (_recipients.length == 0) revert RecipientRequired();
+        if (_budget > type(uint128).max) revert BudgetTooLarge();
+        if (_costPerClick > type(uint128).max) revert CostPerClickTooLarge();
         
         // Validate shares sum
         uint256 totalShares = 0;
-        for (uint256 i = 0; i < _shares.length; i++) {
-            require(_recipients[i] != address(0), "Invalid recipient");
+        uint256 len = _shares.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (_recipients[i] == address(0)) revert InvalidRecipient();
             totalShares += _shares[i];
         }
-        require(totalShares == BASIS_POINTS, "Shares sum must be exactly 10000 basis points");
+        if (totalShares != BASIS_POINTS) revert InvalidSharesSum();
         
         // Transfer USDC from advertiser to this contract escrow
-        require(
-            usdcToken.transferFrom(msg.sender, address(this), _budget),
-            "USDC escrow escrow deposit failed"
-        );
+        if (!usdcToken.transferFrom(msg.sender, address(this), _budget)) {
+            revert EscrowDepositFailed();
+        }
         
         // Approve yieldVault to spend USDC
-        require(
-            usdcToken.approve(address(yieldVault), _budget),
-            "USDC approve failed"
-        );
+        if (!usdcToken.approve(address(yieldVault), _budget)) {
+            revert ApproveFailed();
+        }
         
         // Deposit into vault with slippage protection
         uint256 expectedShares = yieldVault.previewDeposit(_budget);
         uint256 shares = yieldVault.deposit(_budget, address(this));
-        require(shares >= (expectedShares * 9950) / 10000, "Deposit slippage too high");
+        if (shares < (expectedShares * 9950) / 10000) {
+            revert DepositSlippageTooHigh();
+        }
         
         campaignNonce++;
         bytes32 campaignId = keccak256(
@@ -286,12 +329,12 @@ contract AdRevenueSplitter {
         campaigns[campaignId] = Campaign({
             campaignId: campaignId,
             advertiser: msg.sender,
-            totalBudget: _budget,
-            remainingBudget: _budget,
-            costPerClick: _costPerClick,
+            totalBudget: uint128(_budget),
+            remainingBudget: uint128(_budget),
+            costPerClick: uint128(_costPerClick),
             totalClicks: 0,
             active: true,
-            vaultShares: shares,
+            vaultShares: uint128(shares),
             affiliate: _affiliate
         });
         
@@ -305,10 +348,10 @@ contract AdRevenueSplitter {
                 shareBps: 1500
             }));
         } else {
-            for (uint256 i = 0; i < _recipients.length; i++) {
+            for (uint256 i = 0; i < len; i++) {
                 campaignSplits[campaignId].push(SplitShare({
                     recipient: _recipients[i],
-                    shareBps: _shares[i]
+                    shareBps: uint96(_shares[i])
                 }));
             }
         }
@@ -322,7 +365,7 @@ contract AdRevenueSplitter {
             if (usdcToken.balanceOf(address(this)) >= _payoutAmount) {
                 return _payoutAmount;
             }
-            revert("Vault is EOA and no local USDC fallback available");
+            revert VaultWithdrawalFailed();
         }
 
         uint256 expectedSharesToRedeem = 0;
@@ -332,7 +375,9 @@ contract AdRevenueSplitter {
 
         try yieldVault.withdraw(_payoutAmount, address(this), address(this)) returns (uint256 redeemed) {
             if (expectedSharesToRedeem > 0) {
-                require(redeemed <= (expectedSharesToRedeem * 10050) / 10000, "Withdraw slippage too high");
+                if (redeemed > (expectedSharesToRedeem * 10050) / 10000) {
+                    revert VaultWithdrawalFailed();
+                }
             }
             return redeemed;
         } catch {
@@ -343,7 +388,7 @@ contract AdRevenueSplitter {
                     return _payoutAmount; // Default to 1:1 if vault conversion reverts
                 }
             }
-            revert("Vault withdrawal failed and no local USDC fallback available");
+            revert VaultWithdrawalFailed();
         }
     }
 
@@ -352,7 +397,7 @@ contract AdRevenueSplitter {
             if (usdcToken.balanceOf(address(this)) >= _shares) {
                 return _shares;
             }
-            revert("Vault is EOA and no local USDC fallback available");
+            revert VaultRedemptionFailed();
         }
 
         try yieldVault.redeem(_shares, address(this), address(this)) returns (uint256 redeemed) {
@@ -367,7 +412,7 @@ contract AdRevenueSplitter {
             if (usdcToken.balanceOf(address(this)) >= equivalentAssets) {
                 return equivalentAssets;
             }
-            revert("Vault redemption failed and no local USDC fallback available");
+            revert VaultRedemptionFailed();
         }
     }
 
@@ -382,16 +427,18 @@ contract AdRevenueSplitter {
         uint[2] calldata _a,
         uint[2][2] calldata _b,
         uint[2] calldata _c
-    ) external {
-        require(!usedFingerprints[_clickFingerprint], "Fingerprint already used");
-        require(_signatures.length >= oracleThreshold, "Insufficient signatures");
+    ) external nonReentrant {
+        if (usedFingerprints[_clickFingerprint]) revert FingerprintAlreadyUsed();
+        if (_signatures.length < oracleThreshold) revert InsufficientSignatures();
 
         if (verifier != address(0)) {
             uint[2] memory input = [
                 uint256(_campaignId) % 21888242871839275222246405745257275088548364400416034343698204186575808495617,
                 uint256(_clickFingerprint) % 21888242871839275222246405745257275088548364400416034343698204186575808495617
             ];
-            require(IVerifier(verifier).verifyProof(_a, _b, _c, input), "Invalid ZK proof");
+            if (!IVerifier(verifier).verifyProof(_a, _b, _c, input)) {
+                revert InvalidZKProof();
+            }
         }
         
         bytes32 messageHash = keccak256(
@@ -401,13 +448,14 @@ contract AdRevenueSplitter {
             )
         );
         
-        address[] memory signers = new address[](_signatures.length);
-        for (uint256 i = 0; i < _signatures.length; i++) {
+        uint256 sigsLen = _signatures.length;
+        address[] memory signers = new address[](sigsLen);
+        for (uint256 i = 0; i < sigsLen; i++) {
             address signer = recoverSigner(messageHash, _signatures[i]);
-            require(isOracleNode[signer], "Invalid oracle signature");
+            if (!isOracleNode[signer]) revert InvalidOracleSignature();
             
             for (uint256 j = 0; j < i; j++) {
-                require(signers[j] != signer, "Duplicate signature");
+                if (signers[j] == signer) revert DuplicateSignature();
             }
             signers[i] = signer;
         }
@@ -415,11 +463,11 @@ contract AdRevenueSplitter {
         usedFingerprints[_clickFingerprint] = true;
 
         Campaign storage campaign = campaigns[_campaignId];
-        require(campaign.active, "Campaign is not active");
-        require(campaign.remainingBudget >= campaign.costPerClick, "Campaign budget exhausted");
+        if (!campaign.active) revert CampaignNotActive();
+        if (campaign.remainingBudget < campaign.costPerClick) revert CampaignBudgetExhausted();
         
         uint256 payoutAmount = campaign.costPerClick;
-        campaign.remainingBudget -= payoutAmount;
+        campaign.remainingBudget -= uint128(payoutAmount);
         campaign.totalClicks += 1;
         
         // Withdraw from vault with slippage protection and fallback
@@ -427,7 +475,7 @@ contract AdRevenueSplitter {
         
         // Update campaign shares
         if (campaign.vaultShares >= sharesRedeemed) {
-            campaign.vaultShares -= sharesRedeemed;
+            campaign.vaultShares -= uint128(sharesRedeemed);
         } else {
             campaign.vaultShares = 0;
         }
@@ -439,13 +487,18 @@ contract AdRevenueSplitter {
             platformFee = (payoutAmount * 500) / BASIS_POINTS;
             distributeAmount = payoutAmount - platformFee;
             if (platformFee > 0) {
-                require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+                if (!usdcToken.transfer(platformWallet, platformFee)) {
+                    revert PlatformFeeTransferFailed();
+                }
             }
             SplitShare[] storage splits = campaignSplits[_campaignId];
-            for (uint256 i = 0; i < splits.length; i++) {
+            uint256 splitsLen = splits.length;
+            for (uint256 i = 0; i < splitsLen; i++) {
                 uint256 recipientAmount = (payoutAmount * splits[i].shareBps) / BASIS_POINTS;
                 if (recipientAmount > 0) {
-                    require(usdcToken.transfer(splits[i].recipient, recipientAmount), "Recipient payment failed");
+                    if (!usdcToken.transfer(splits[i].recipient, recipientAmount)) {
+                        revert RecipientPaymentFailed();
+                    }
                     emit RecipientPaid(_campaignId, splits[i].recipient, recipientAmount);
                 }
             }
@@ -453,13 +506,18 @@ contract AdRevenueSplitter {
             platformFee = (payoutAmount * platformFeeBps) / BASIS_POINTS;
             distributeAmount = payoutAmount - platformFee;
             if (platformFee > 0) {
-                require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+                if (!usdcToken.transfer(platformWallet, platformFee)) {
+                    revert PlatformFeeTransferFailed();
+                }
             }
             SplitShare[] storage splits = campaignSplits[_campaignId];
-            for (uint256 i = 0; i < splits.length; i++) {
+            uint256 splitsLen = splits.length;
+            for (uint256 i = 0; i < splitsLen; i++) {
                 uint256 recipientAmount = (distributeAmount * splits[i].shareBps) / BASIS_POINTS;
                 if (recipientAmount > 0) {
-                    require(usdcToken.transfer(splits[i].recipient, recipientAmount), "Recipient payment failed");
+                    if (!usdcToken.transfer(splits[i].recipient, recipientAmount)) {
+                        revert RecipientPaymentFailed();
+                    }
                     emit RecipientPaid(_campaignId, splits[i].recipient, recipientAmount);
                 }
             }
@@ -478,7 +536,9 @@ contract AdRevenueSplitter {
             if (remainingShares > 0) {
                 refundAmount = _redeemFromVault(remainingShares);
                 if (refundAmount > 0) {
-                    require(usdcToken.transfer(campaign.advertiser, refundAmount), "Refund failed");
+                    if (!usdcToken.transfer(campaign.advertiser, refundAmount)) {
+                        revert RefundFailed();
+                    }
                 }
             }
             emit CampaignClosed(_campaignId, refundAmount);
@@ -495,12 +555,13 @@ contract AdRevenueSplitter {
         bytes32[] calldata _campaignIds,
         address[] calldata _creators,
         uint256[] calldata _amounts
-    ) external {
-        require(isOracleNode[msg.sender] || msg.sender == owner, "Only authorized settler can call");
-        require(_campaignIds.length == _creators.length, "Mismatched campaigns and creators");
-        require(_creators.length == _amounts.length, "Mismatched creators and amounts");
+    ) external nonReentrant {
+        if (!isOracleNode[msg.sender] && msg.sender != owner) revert OnlyOracleNode();
+        if (_campaignIds.length != _creators.length) revert MismatchedRecipientsAndShares();
+        if (_creators.length != _amounts.length) revert MismatchedRecipientsAndShares();
 
-        for (uint256 i = 0; i < _campaignIds.length; i++) {
+        uint256 len = _campaignIds.length;
+        for (uint256 i = 0; i < len; i++) {
             bytes32 campaignId = _campaignIds[i];
             address creator = _creators[i];
             uint256 amount = _amounts[i];
@@ -508,17 +569,17 @@ contract AdRevenueSplitter {
             if (amount == 0) continue;
 
             Campaign storage campaign = campaigns[campaignId];
-            require(campaign.active, "Campaign is not active");
-            require(campaign.remainingBudget >= amount, "Campaign budget exhausted");
+            if (!campaign.active) revert CampaignNotActive();
+            if (campaign.remainingBudget < amount) revert CampaignBudgetExhausted();
 
-            campaign.remainingBudget -= amount;
+            campaign.remainingBudget -= uint128(amount);
             campaign.totalClicks += 1;
             
             // Withdraw from vault
             uint256 sharesRedeemed = _withdrawFromVault(amount);
             
             if (campaign.vaultShares >= sharesRedeemed) {
-                campaign.vaultShares -= sharesRedeemed;
+                campaign.vaultShares -= uint128(sharesRedeemed);
             } else {
                 campaign.vaultShares = 0;
             }
@@ -532,14 +593,20 @@ contract AdRevenueSplitter {
                 distributeAmount = amount - platformFee - affiliateFee;
                 
                 if (platformFee > 0) {
-                    require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+                    if (!usdcToken.transfer(platformWallet, platformFee)) {
+                        revert PlatformFeeTransferFailed();
+                    }
                 }
                 if (affiliateFee > 0) {
-                    require(usdcToken.transfer(campaign.affiliate, affiliateFee), "Affiliate fee transfer failed");
+                    if (!usdcToken.transfer(campaign.affiliate, affiliateFee)) {
+                        revert AffiliateFeeTransferFailed();
+                    }
                     emit RecipientPaid(campaignId, campaign.affiliate, affiliateFee);
                 }
                 if (distributeAmount > 0) {
-                    require(usdcToken.transfer(creator, distributeAmount), "Creator payment failed");
+                    if (!usdcToken.transfer(creator, distributeAmount)) {
+                        revert CreatorPaymentFailed();
+                    }
                     emit RecipientPaid(campaignId, creator, distributeAmount);
                 }
                 emit RevenueSplitExecuted(campaignId, amount, platformFee, distributeAmount + affiliateFee);
@@ -548,10 +615,14 @@ contract AdRevenueSplitter {
                 distributeAmount = amount - platformFee;
                 
                 if (platformFee > 0) {
-                    require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+                    if (!usdcToken.transfer(platformWallet, platformFee)) {
+                        revert PlatformFeeTransferFailed();
+                    }
                 }
                 if (distributeAmount > 0) {
-                    require(usdcToken.transfer(creator, distributeAmount), "Creator payment failed");
+                    if (!usdcToken.transfer(creator, distributeAmount)) {
+                        revert CreatorPaymentFailed();
+                    }
                     emit RecipientPaid(campaignId, creator, distributeAmount);
                 }
                 emit RevenueSplitExecuted(campaignId, amount, platformFee, distributeAmount);
@@ -568,7 +639,9 @@ contract AdRevenueSplitter {
                 if (remainingShares > 0) {
                     refundAmount = _redeemFromVault(remainingShares);
                     if (refundAmount > 0) {
-                        require(usdcToken.transfer(campaign.advertiser, refundAmount), "Refund failed");
+                        if (!usdcToken.transfer(campaign.advertiser, refundAmount)) {
+                            revert RefundFailed();
+                        }
                     }
                 }
                 emit CampaignClosed(campaignId, refundAmount);
@@ -589,7 +662,7 @@ contract AdRevenueSplitter {
      * @notice Helper to split a signature into r, s, v components.
      */
     function splitSignature(bytes memory sig) public pure returns (bytes32 r, bytes32 s, uint8 v) {
-        require(sig.length == 65, "Invalid signature length");
+        if (sig.length != 65) revert SignatureLengthInvalid();
 
         assembly {
             r := mload(add(sig, 32))
@@ -601,10 +674,10 @@ contract AdRevenueSplitter {
     /**
      * @notice Emergency withdraw for Advertiser to pause and recoup remaining campaign funds immediately.
      */
-    function withdrawRemainingBudget(bytes32 _campaignId) external {
+    function withdrawRemainingBudget(bytes32 _campaignId) external nonReentrant {
         Campaign storage campaign = campaigns[_campaignId];
-        require(campaign.advertiser == msg.sender, "Only advertiser can withdraw");
-        require(campaign.active, "Campaign is not active");
+        if (campaign.advertiser != msg.sender) revert OnlyAdvertiserCanWithdraw();
+        if (!campaign.active) revert CampaignNotActive();
         
         uint256 refundShares = campaign.vaultShares;
         campaign.remainingBudget = 0;
@@ -615,7 +688,9 @@ contract AdRevenueSplitter {
         if (refundShares > 0) {
             refundAmount = _redeemFromVault(refundShares);
             if (refundAmount > 0) {
-                require(usdcToken.transfer(msg.sender, refundAmount), "Withdraw refund failed");
+                if (!usdcToken.transfer(msg.sender, refundAmount)) {
+                    revert WithdrawRefundFailed();
+                }
             }
         }
         
@@ -642,9 +717,10 @@ contract AdRevenueSplitter {
      */
     function getCampaignSplits(bytes32 _campaignId) external view returns (address[] memory, uint256[] memory) {
         SplitShare[] storage splits = campaignSplits[_campaignId];
-        address[] memory recipients = new address[](splits.length);
-        uint256[] memory shares = new uint256[](splits.length);
-        for (uint256 i = 0; i < splits.length; i++) {
+        uint256 len = splits.length;
+        address[] memory recipients = new address[](len);
+        uint256[] memory shares = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
             recipients[i] = splits[i].recipient;
             shares[i] = splits[i].shareBps;
         }
