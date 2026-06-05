@@ -17,6 +17,30 @@ interface IERC20 {
 }
 
 /**
+ * @dev Interface of the ERC4626 standard.
+ */
+interface IERC4626 is IERC20 {
+    function asset() external view returns (address);
+    function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+    function mint(uint256 shares, address receiver) external returns (uint256 assets);
+    function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
+    function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
+    
+    function totalAssets() external view returns (uint256);
+    function convertToShares(uint256 assets) external view returns (uint256);
+    function convertToAssets(uint256 shares) external view returns (uint256);
+    function previewDeposit(uint256 assets) external view returns (uint256);
+    function previewMint(uint256 shares) external view returns (uint256);
+    function previewWithdraw(uint256 assets) external view returns (uint256);
+    function previewRedeem(uint256 shares) external view returns (uint256);
+    
+    function maxDeposit(address receiver) external view returns (uint256);
+    function maxMint(address receiver) external view returns (uint256);
+    function maxWithdraw(address owner) external view returns (uint256);
+    function maxRedeem(address owner) external view returns (uint256);
+}
+
+/**
  * @title AdRevenueSplitter
  * @notice Decentralized Ad Escrow & Automated Multi-Recipient Revenue Splitter on Arc L1.
  * USDC is the native gas token, but we also interact with ERC-20 USDC (6 decimals).
@@ -24,6 +48,7 @@ interface IERC20 {
 contract AdRevenueSplitter {
     
     IERC20 public immutable usdcToken;
+    IERC4626 public yieldVault;
     address public owner;
     address public oracleNode;
     
@@ -44,6 +69,7 @@ contract AdRevenueSplitter {
         uint256 costPerClick;     // 6 decimals USDC
         uint256 totalClicks;
         bool active;
+        uint256 vaultShares;      // shares allocated to the campaign in yieldVault
     }
     
     // Mapping from campaignId to Campaign details
@@ -82,6 +108,7 @@ contract AdRevenueSplitter {
     event OracleUpdated(address indexed oldOracle, address indexed newOracle);
     event PlatformWalletUpdated(address indexed oldWallet, address indexed newWallet);
     event PlatformFeeUpdated(uint256 oldFee, uint256 newFee);
+    event YieldVaultUpdated(address indexed oldVault, address indexed newVault);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can call");
@@ -93,14 +120,16 @@ contract AdRevenueSplitter {
         _;
     }
     
-    constructor(address _usdcToken, address _oracleNode, address _platformWallet) {
+    constructor(address _usdcToken, address _oracleNode, address _platformWallet, address _yieldVault) {
         require(_usdcToken != address(0), "Invalid token address");
         require(_oracleNode != address(0), "Invalid oracle address");
         require(_platformWallet != address(0), "Invalid platform wallet");
+        require(_yieldVault != address(0), "Invalid yield vault address");
         
         usdcToken = IERC20(_usdcToken);
         oracleNode = _oracleNode;
         platformWallet = _platformWallet;
+        yieldVault = IERC4626(_yieldVault);
         owner = msg.sender;
     }
     
@@ -129,6 +158,15 @@ contract AdRevenueSplitter {
         require(_bps <= 1000, "Fee cannot exceed 10%");
         emit PlatformFeeUpdated(platformFeeBps, _bps);
         platformFeeBps = _bps;
+    }
+    
+    /**
+     * @notice Set the yield vault address.
+     */
+    function setYieldVault(address _yieldVault) external onlyOwner {
+        require(_yieldVault != address(0), "Invalid yield vault address");
+        emit YieldVaultUpdated(address(yieldVault), _yieldVault);
+        yieldVault = IERC4626(_yieldVault);
     }
     
     /**
@@ -164,6 +202,17 @@ contract AdRevenueSplitter {
             "USDC escrow deposit failed"
         );
         
+        // Approve yieldVault to spend USDC
+        require(
+            usdcToken.approve(address(yieldVault), _budget),
+            "USDC approve failed"
+        );
+        
+        // Deposit into vault with slippage protection
+        uint256 expectedShares = yieldVault.previewDeposit(_budget);
+        uint256 shares = yieldVault.deposit(_budget, address(this));
+        require(shares >= (expectedShares * 9950) / 10000, "Deposit slippage too high");
+        
         campaignNonce++;
         bytes32 campaignId = keccak256(
             abi.encodePacked(msg.sender, _budget, _costPerClick, campaignNonce, block.timestamp)
@@ -176,7 +225,8 @@ contract AdRevenueSplitter {
             remainingBudget: _budget,
             costPerClick: _costPerClick,
             totalClicks: 0,
-            active: true
+            active: true,
+            vaultShares: shares
         });
         
         for (uint256 i = 0; i < _recipients.length; i++) {
@@ -190,6 +240,60 @@ contract AdRevenueSplitter {
         return campaignId;
     }
     
+    function _withdrawFromVault(uint256 _payoutAmount) private returns (uint256) {
+        if (address(yieldVault).code.length == 0) {
+            if (usdcToken.balanceOf(address(this)) >= _payoutAmount) {
+                return _payoutAmount;
+            }
+            revert("Vault is EOA and no local USDC fallback available");
+        }
+
+        uint256 expectedSharesToRedeem = 0;
+        try yieldVault.previewWithdraw(_payoutAmount) returns (uint256 expected) {
+            expectedSharesToRedeem = expected;
+        } catch {}
+
+        try yieldVault.withdraw(_payoutAmount, address(this), address(this)) returns (uint256 redeemed) {
+            if (expectedSharesToRedeem > 0) {
+                require(redeemed <= (expectedSharesToRedeem * 10050) / 10000, "Withdraw slippage too high");
+            }
+            return redeemed;
+        } catch {
+            if (usdcToken.balanceOf(address(this)) >= _payoutAmount) {
+                try yieldVault.convertToShares(_payoutAmount) returns (uint256 shares) {
+                    return shares;
+                } catch {
+                    return _payoutAmount; // Default to 1:1 if vault conversion reverts
+                }
+            }
+            revert("Vault withdrawal failed and no local USDC fallback available");
+        }
+    }
+
+    function _redeemFromVault(uint256 _shares) private returns (uint256) {
+        if (address(yieldVault).code.length == 0) {
+            if (usdcToken.balanceOf(address(this)) >= _shares) {
+                return _shares;
+            }
+            revert("Vault is EOA and no local USDC fallback available");
+        }
+
+        try yieldVault.redeem(_shares, address(this), address(this)) returns (uint256 redeemed) {
+            return redeemed;
+        } catch {
+            uint256 equivalentAssets = 0;
+            try yieldVault.convertToAssets(_shares) returns (uint256 assets) {
+                equivalentAssets = assets;
+            } catch {
+                equivalentAssets = _shares; // Default to 1:1 if vault conversion reverts
+            }
+            if (usdcToken.balanceOf(address(this)) >= equivalentAssets) {
+                return equivalentAssets;
+            }
+            revert("Vault redemption failed and no local USDC fallback available");
+        }
+    }
+
     /**
      * @notice Distributes payout for a single click instantly to dynamic recipients.
      * Called by any relayer or account with a valid signature from the Fraud Detection Oracle.
@@ -201,13 +305,14 @@ contract AdRevenueSplitter {
     ) external {
         require(!usedFingerprints[_clickFingerprint], "Fingerprint already used");
         
-        // Compute EIP-191 message hash
-        bytes32 messageHash = keccak256(abi.encodePacked(_campaignId, _clickFingerprint));
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
-        
-        // Recover signer address
-        address signer = recoverSigner(ethSignedMessageHash, _signature);
-        require(signer == oracleNode, "Invalid oracle signature");
+        // Recover signer address and verify oracle signature
+        require(
+            recoverSigner(
+                keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(abi.encodePacked(_campaignId, _clickFingerprint)))),
+                _signature
+            ) == oracleNode,
+            "Invalid oracle signature"
+        );
         
         usedFingerprints[_clickFingerprint] = true;
 
@@ -218,6 +323,16 @@ contract AdRevenueSplitter {
         uint256 payoutAmount = campaign.costPerClick;
         campaign.remainingBudget -= payoutAmount;
         campaign.totalClicks += 1;
+        
+        // Withdraw from vault with slippage protection and fallback
+        uint256 sharesRedeemed = _withdrawFromVault(payoutAmount);
+        
+        // Update campaign shares
+        if (campaign.vaultShares >= sharesRedeemed) {
+            campaign.vaultShares -= sharesRedeemed;
+        } else {
+            campaign.vaultShares = 0;
+        }
         
         // Split payout
         uint256 platformFee = (payoutAmount * platformFeeBps) / BASIS_POINTS;
@@ -241,14 +356,19 @@ contract AdRevenueSplitter {
         
         if (campaign.remainingBudget < campaign.costPerClick) {
             campaign.active = false;
-            emit CampaignClosed(_campaignId, campaign.remainingBudget);
             
-            // Refund any tiny remaining balance (dust) to advertiser
-            if (campaign.remainingBudget > 0) {
-                uint256 dustRefund = campaign.remainingBudget;
-                campaign.remainingBudget = 0;
-                require(usdcToken.transfer(campaign.advertiser, dustRefund), "Refund failed");
+            uint256 remainingShares = campaign.vaultShares;
+            campaign.vaultShares = 0;
+            campaign.remainingBudget = 0;
+            
+            uint256 refundAmount = 0;
+            if (remainingShares > 0) {
+                refundAmount = _redeemFromVault(remainingShares);
+                if (refundAmount > 0) {
+                    require(usdcToken.transfer(campaign.advertiser, refundAmount), "Refund failed");
+                }
             }
+            emit CampaignClosed(_campaignId, refundAmount);
         }
     }
 
@@ -280,14 +400,36 @@ contract AdRevenueSplitter {
         Campaign storage campaign = campaigns[_campaignId];
         require(campaign.advertiser == msg.sender, "Only advertiser can withdraw");
         require(campaign.active, "Campaign is not active");
-        require(campaign.remainingBudget > 0, "No funds left in campaign");
         
-        uint256 refundAmount = campaign.remainingBudget;
+        uint256 refundShares = campaign.vaultShares;
         campaign.remainingBudget = 0;
+        campaign.vaultShares = 0;
         campaign.active = false;
         
-        require(usdcToken.transfer(msg.sender, refundAmount), "Withdraw refund failed");
+        uint256 refundAmount = 0;
+        if (refundShares > 0) {
+            refundAmount = _redeemFromVault(refundShares);
+            if (refundAmount > 0) {
+                require(usdcToken.transfer(msg.sender, refundAmount), "Withdraw refund failed");
+            }
+        }
+        
         emit CampaignClosed(_campaignId, refundAmount);
+    }
+    
+    /**
+     * @notice Calculate the accrued interest of a campaign in the yield vault.
+     */
+    function getCampaignYield(bytes32 _campaignId) public view returns (uint256) {
+        Campaign memory campaign = campaigns[_campaignId];
+        if (!campaign.active || campaign.vaultShares == 0) {
+            return 0;
+        }
+        uint256 currentAssets = yieldVault.convertToAssets(campaign.vaultShares);
+        if (currentAssets > campaign.remainingBudget) {
+            return currentAssets - campaign.remainingBudget;
+        }
+        return 0;
     }
     
     /**
