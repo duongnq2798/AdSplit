@@ -52,6 +52,10 @@ contract AdRevenueSplitter {
     address public owner;
     address public oracleNode;
     
+    // Multi-Oracle state variables for DON
+    mapping(address => bool) public isOracleNode;
+    uint256 public oracleThreshold;
+    
     uint256 public constant BASIS_POINTS = 10000; // 100% = 10000 basis points
     uint256 public platformFeeBps = 300;         // 3.0% platform fee
     address public platformWallet;
@@ -109,6 +113,11 @@ contract AdRevenueSplitter {
     event PlatformWalletUpdated(address indexed oldWallet, address indexed newWallet);
     event PlatformFeeUpdated(uint256 oldFee, uint256 newFee);
     event YieldVaultUpdated(address indexed oldVault, address indexed newVault);
+    
+    // DON specific events
+    event OracleNodeAdded(address indexed node);
+    event OracleNodeRemoved(address indexed node);
+    event OracleThresholdUpdated(uint256 newThreshold);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can call");
@@ -116,7 +125,7 @@ contract AdRevenueSplitter {
     }
     
     modifier onlyOracle() {
-        require(msg.sender == oracleNode, "Only fraud detection oracle can call");
+        require(isOracleNode[msg.sender], "Only fraud detection oracle can call");
         _;
     }
     
@@ -128,6 +137,8 @@ contract AdRevenueSplitter {
         
         usdcToken = IERC20(_usdcToken);
         oracleNode = _oracleNode;
+        isOracleNode[_oracleNode] = true;
+        oracleThreshold = 1;
         platformWallet = _platformWallet;
         yieldVault = IERC4626(_yieldVault);
         owner = msg.sender;
@@ -139,7 +150,37 @@ contract AdRevenueSplitter {
     function setOracleNode(address _oracleNode) external onlyOwner {
         require(_oracleNode != address(0), "Invalid address");
         emit OracleUpdated(oracleNode, _oracleNode);
+        isOracleNode[oracleNode] = false;
         oracleNode = _oracleNode;
+        isOracleNode[_oracleNode] = true;
+    }
+    
+    /**
+     * @notice Add a new trusted oracle node.
+     */
+    function addOracleNode(address _node) external onlyOwner {
+        require(_node != address(0), "Invalid address");
+        require(!isOracleNode[_node], "Already oracle");
+        isOracleNode[_node] = true;
+        emit OracleNodeAdded(_node);
+    }
+    
+    /**
+     * @notice Remove a trusted oracle node.
+     */
+    function removeOracleNode(address _node) external onlyOwner {
+        require(isOracleNode[_node], "Not oracle");
+        isOracleNode[_node] = false;
+        emit OracleNodeRemoved(_node);
+    }
+    
+    /**
+     * @notice Update the required quorum threshold for consensus.
+     */
+    function setOracleThreshold(uint256 _threshold) external onlyOwner {
+        require(_threshold > 0, "Threshold must be > 0");
+        oracleThreshold = _threshold;
+        emit OracleThresholdUpdated(_threshold);
     }
     
     /**
@@ -301,18 +342,28 @@ contract AdRevenueSplitter {
     function recordEngagement(
         bytes32 _campaignId, 
         bytes32 _clickFingerprint, 
-        bytes calldata _signature
+        bytes[] calldata _signatures
     ) external {
         require(!usedFingerprints[_clickFingerprint], "Fingerprint already used");
+        require(_signatures.length >= oracleThreshold, "Insufficient signatures");
         
-        // Recover signer address and verify oracle signature
-        require(
-            recoverSigner(
-                keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(abi.encodePacked(_campaignId, _clickFingerprint)))),
-                _signature
-            ) == oracleNode,
-            "Invalid oracle signature"
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32", 
+                keccak256(abi.encodePacked(_campaignId, _clickFingerprint))
+            )
         );
+        
+        address[] memory signers = new address[](_signatures.length);
+        for (uint256 i = 0; i < _signatures.length; i++) {
+            address signer = recoverSigner(messageHash, _signatures[i]);
+            require(isOracleNode[signer], "Invalid oracle signature");
+            
+            for (uint256 j = 0; j < i; j++) {
+                require(signers[j] != signer, "Duplicate signature");
+            }
+            signers[i] = signer;
+        }
         
         usedFingerprints[_clickFingerprint] = true;
 
@@ -383,7 +434,7 @@ contract AdRevenueSplitter {
         address[] calldata _creators,
         uint256[] calldata _amounts
     ) external {
-        require(msg.sender == oracleNode || msg.sender == owner, "Only authorized settler can call");
+        require(isOracleNode[msg.sender] || msg.sender == owner, "Only authorized settler can call");
         require(_campaignIds.length == _creators.length, "Mismatched campaigns and creators");
         require(_creators.length == _amounts.length, "Mismatched creators and amounts");
 
