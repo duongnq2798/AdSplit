@@ -21,12 +21,18 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
     mockUSDC = await MockERC20.deploy(ethers.parseUnits("1000", 6)); // Mint 1000 mock USDC to owner
     await mockUSDC.waitForDeployment();
 
+    // Deploy MockYieldVault
+    const MockYieldVault = await ethers.getContractFactory("MockYieldVault");
+    const mockVault = await MockYieldVault.deploy(await mockUSDC.getAddress());
+    await mockVault.waitForDeployment();
+
     // Deploy AdRevenueSplitter
     const AdRevenueSplitter = await ethers.getContractFactory("AdRevenueSplitter");
     splitter = await AdRevenueSplitter.deploy(
       await mockUSDC.getAddress(),
       oracleNode.address,
-      platformWallet.address
+      platformWallet.address,
+      await mockVault.getAddress()
     );
     await splitter.waitForDeployment();
 
