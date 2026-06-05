@@ -28,6 +28,7 @@ export interface DbCampaign {
   active: boolean;
   platform_share: number;
   distributor_share: number;
+  affiliate?: string;
 }
 
 export interface DbClickLog {

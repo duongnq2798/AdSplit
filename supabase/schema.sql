@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS adsplit.campaigns (
     active BOOLEAN DEFAULT TRUE,
     platform_share INT DEFAULT 300, -- in basis points (3.0%)
     distributor_share INT DEFAULT 1000, -- in basis points (10.0%)
+    affiliate VARCHAR(42),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -243,4 +244,25 @@ CREATE POLICY "Allow select bridge_claims for anyone" ON adsplit.bridge_claims F
 CREATE POLICY "Allow all bridge_claims for service_role or authenticated" ON adsplit.bridge_claims FOR ALL TO authenticated, service_role USING (true) WITH CHECK (true);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON adsplit.bridge_claims TO anon, authenticated, service_role;
+
+-- 13. REGISTERED DOMAINS FOR AD TAG VALIDATION
+CREATE TABLE IF NOT EXISTS adsplit.registered_domains (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    domain VARCHAR(255) NOT NULL UNIQUE,
+    publisher_wallet VARCHAR(42) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE adsplit.registered_domains ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow select registered_domains for anyone" ON adsplit.registered_domains FOR SELECT USING (true);
+CREATE POLICY "Allow all registered_domains for service_role or authenticated" ON adsplit.registered_domains FOR ALL TO authenticated, service_role USING (true) WITH CHECK (true);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON adsplit.registered_domains TO anon, authenticated, service_role;
+
+-- Insert default publisher domains for sandbox local testing
+INSERT INTO adsplit.registered_domains (domain, publisher_wallet)
+VALUES 
+    ('localhost', '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'),
+    ('127.0.0.1', '0x3C44Cd3570DE730c26841569B8100c8411905289')
+ON CONFLICT (domain) DO NOTHING;
 
