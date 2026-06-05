@@ -59,6 +59,20 @@ export class TelemetryCollector {
     }
   }
 
+  getRawData(): TelemetryData {
+    return {
+      mouseMoves: this.mouseMoves,
+      clicks: this.clicks,
+      keyCount: this.keyCount,
+      touchCount: this.touchCount,
+      screenWidth: typeof window !== 'undefined' ? window.innerWidth : 1920,
+      screenHeight: typeof window !== 'undefined' ? window.innerHeight : 1080,
+      loadTime: this.loadTime,
+      clickTime: Date.now(),
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'headless',
+    };
+  }
+
   async getEncryptedPayload(secret: string): Promise<string> {
     const data: TelemetryData = {
       mouseMoves: this.mouseMoves,
