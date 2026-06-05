@@ -40,6 +40,15 @@ interface IERC4626 is IERC20 {
     function maxRedeem(address owner) external view returns (uint256);
 }
 
+interface IVerifier {
+    function verifyProof(
+        uint[2] calldata a,
+        uint[2][2] calldata b,
+        uint[2] calldata c,
+        uint[2] calldata input
+    ) external view returns (bool);
+}
+
 /**
  * @title AdRevenueSplitter
  * @notice Decentralized Ad Escrow & Automated Multi-Recipient Revenue Splitter on Arc L1.
@@ -79,6 +88,9 @@ contract AdRevenueSplitter {
     // Mapping from campaignId to Campaign details
     mapping(bytes32 => Campaign) public campaigns;
     
+    // Deployed ZK Verifier contract address
+    address public verifier;
+    
     // Mapping from campaignId to the default split shares (creators / affiliate network / platform)
     mapping(bytes32 => SplitShare[]) private campaignSplits;
     
@@ -113,6 +125,7 @@ contract AdRevenueSplitter {
     event PlatformWalletUpdated(address indexed oldWallet, address indexed newWallet);
     event PlatformFeeUpdated(uint256 oldFee, uint256 newFee);
     event YieldVaultUpdated(address indexed oldVault, address indexed newVault);
+    event VerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
     
     // DON specific events
     event OracleNodeAdded(address indexed node);
@@ -208,6 +221,15 @@ contract AdRevenueSplitter {
         require(_yieldVault != address(0), "Invalid yield vault address");
         emit YieldVaultUpdated(address(yieldVault), _yieldVault);
         yieldVault = IERC4626(_yieldVault);
+    }
+    
+    /**
+     * @notice Set the ZK Verifier contract address.
+     */
+    function setVerifier(address _verifier) external onlyOwner {
+        require(_verifier != address(0), "Invalid verifier address");
+        emit VerifierUpdated(verifier, _verifier);
+        verifier = _verifier;
     }
     
     /**
@@ -342,10 +364,21 @@ contract AdRevenueSplitter {
     function recordEngagement(
         bytes32 _campaignId, 
         bytes32 _clickFingerprint, 
-        bytes[] calldata _signatures
+        bytes[] calldata _signatures,
+        uint[2] calldata _a,
+        uint[2][2] calldata _b,
+        uint[2] calldata _c
     ) external {
         require(!usedFingerprints[_clickFingerprint], "Fingerprint already used");
         require(_signatures.length >= oracleThreshold, "Insufficient signatures");
+
+        if (verifier != address(0)) {
+            uint[2] memory input = [
+                uint256(_campaignId) % 21888242871839275222246405745257275088548364400416034343698204186575808495617,
+                uint256(_clickFingerprint) % 21888242871839275222246405745257275088548364400416034343698204186575808495617
+            ];
+            require(IVerifier(verifier).verifyProof(_a, _b, _c, input), "Invalid ZK proof");
+        }
         
         bytes32 messageHash = keccak256(
             abi.encodePacked(
