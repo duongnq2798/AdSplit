@@ -120,6 +120,13 @@ const CONTRACT_ABI = [
     type: "function"
   },
   {
+    inputs: [{ internalType: "bytes32", name: "_campaignId", type: "bytes32" }],
+    name: "getCampaignYield",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function"
+  },
+  {
     anonymous: false,
     inputs: [
       { indexed: true, internalType: "bytes32", name: "campaignId", type: "bytes32" },
@@ -246,6 +253,7 @@ export default function Home() {
 
   // State populated from Database / Blockchain
   const [campaigns, setCampaigns] = useState<DbCampaign[]>([]);
+  const [campaignYields, setCampaignYields] = useState<Record<string, string>>({});
   const [clickLogs, setClickLogs] = useState<DbClickLog[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
@@ -433,11 +441,13 @@ export default function Home() {
     try {
       // 1. Fetch campaigns from Supabase
       const dbCampaigns = await dbService.getActiveCampaigns();
+      let activeCampaignsList: DbCampaign[] = [];
       if (dbCampaigns && dbCampaigns.length > 0) {
         setCampaigns(dbCampaigns);
+        activeCampaignsList = dbCampaigns;
       } else {
         // Fallback default realistic data if database is not configured
-        setCampaigns([
+        const fallback = [
           {
             id: "0xad0001bc93",
             title: "Circle Web3 Developer Drive",
@@ -462,7 +472,9 @@ export default function Home() {
             platform_share: 300,
             distributor_share: 1000
           }
-        ]);
+        ];
+        setCampaigns(fallback);
+        activeCampaignsList = fallback;
       }
 
       // 2. Fetch click logs from Supabase
@@ -494,6 +506,44 @@ export default function Home() {
         .select("*");
       
       setWebhookLogs(dbWebhooks || []);
+
+      // 4. Fetch/calculate yields for active campaigns
+      const yieldsMap: Record<string, string> = {};
+      const formattedContractAddress = getAddress(contractAddress.trim().toLowerCase());
+      let isContractDeployed = false;
+      try {
+        const contractBytecode = await publicClient.getCode({ address: formattedContractAddress });
+        isContractDeployed = !!(contractBytecode && contractBytecode !== "0x" && contractBytecode.length > 2);
+      } catch (err) {
+        console.warn("Could not check if contract is deployed for yield syncing", err);
+      }
+
+      for (const camp of activeCampaignsList) {
+        if (!camp.active) {
+          yieldsMap[camp.id] = "0.0000";
+          continue;
+        }
+        if (isContractDeployed) {
+          try {
+            const yieldAmount = await publicClient.readContract({
+              address: formattedContractAddress,
+              abi: CONTRACT_ABI,
+              functionName: "getCampaignYield",
+              args: [camp.id as `0x${string}`]
+            });
+            yieldsMap[camp.id] = parseFloat(formatUnits(yieldAmount as bigint, 6)).toFixed(4);
+          } catch (e) {
+            console.warn(`Failed to fetch on-chain yield for ${camp.id}:`, e);
+            // Sim fallback in case of errors
+            yieldsMap[camp.id] = (camp.remaining_budget * 0.10 * (camp.total_clicks + 1) * 0.01).toFixed(4);
+          }
+        } else {
+          // Sandbox Mode: simulate APY yield (10% APY simulation)
+          yieldsMap[camp.id] = (camp.remaining_budget * 0.10 * (camp.total_clicks + 1) * 0.01).toFixed(4);
+        }
+      }
+      setCampaignYields(yieldsMap);
+
     } catch (e) {
       console.warn("Failed to sync databases, running local state fallback:", e);
     } finally {
@@ -1717,6 +1767,11 @@ export default function Home() {
                               <span className="text-xs font-black text-[#744D2B] font-mono block mt-1 leading-none">
                                 {camp.remaining_budget.toFixed(2)} / {camp.total_budget.toFixed(2)} <span className="text-[8px] text-[#A78E84]">USDC</span>
                               </span>
+                              {camp.active && (
+                                <span className="block text-[9px] text-[#35C7A4] font-black font-mono mt-1 leading-none">
+                                  Yield Earned: +{campaignYields[camp.id] || "0.0000"} USDC
+                                </span>
+                              )}
                             </div>
 
                             {camp.active ? (
@@ -2407,11 +2462,19 @@ export default function Home() {
                 <Coins className="h-5 w-5 text-[#744D2B]/80" />
               </div>
               
-              <div className="z-10">
-                <span className="text-[9px] text-[#744D2B]/75 block uppercase tracking-wider font-mono font-bold leading-none">Locked Escrow Budget</span>
-                <span className="text-lg font-black font-mono block mt-1 leading-none">
-                  {campaigns.filter(c => c.active).reduce((acc, c) => acc + c.remaining_budget, 0).toFixed(2)} USDC
-                </span>
+              <div className="z-10 flex justify-between items-end">
+                <div>
+                  <span className="text-[9px] text-[#744D2B]/75 block uppercase tracking-wider font-mono font-bold leading-none">Locked Escrow Budget</span>
+                  <span className="text-lg font-black font-mono block mt-1 leading-none">
+                    {campaigns.filter(c => c.active).reduce((acc, c) => acc + c.remaining_budget, 0).toFixed(2)} USDC
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[9px] text-[#35C7A4]/90 block uppercase tracking-wider font-mono font-black leading-none">Total Yield Earned</span>
+                  <span className="text-xs font-black font-mono block mt-1 leading-none text-[#35C7A4]">
+                    +{campaigns.filter(c => c.active).reduce((acc, c) => acc + parseFloat(campaignYields[c.id] || "0.00"), 0).toFixed(4)} USDC
+                  </span>
+                </div>
               </div>
               
               <div className="flex justify-between items-center text-[9px] font-mono leading-none z-10">
