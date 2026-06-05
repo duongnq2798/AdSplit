@@ -96,7 +96,7 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
       const initialCreator2 = await mockUSDC.balanceOf(creator2.address);
 
       // Trigger recordEngagement from any caller (e.g. owner) providing signature
-      await splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, signature);
+      await splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [signature]);
 
       // Total click cost: 1 USDC.
       // Platform fee: 3% of 1 USDC = 0.03 USDC.
@@ -122,7 +122,7 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
       const signature = await advertiser.signMessage(ethers.getBytes(messageHash));
 
       await expect(
-        splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, signature)
+        splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [signature])
       ).to.be.revertedWith("Invalid oracle signature");
     });
 
@@ -134,11 +134,11 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
       const signature = await oracleNode.signMessage(ethers.getBytes(messageHash));
 
       // First click succeeds
-      await splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, signature);
-
+      await splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [signature]);
+      
       // Second click with same fingerprint reverts
       await expect(
-        splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, signature)
+        splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [signature])
       ).to.be.revertedWith("Fingerprint already used");
     });
 
@@ -148,7 +148,7 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
         const fingerprint = ethers.id(`click_${i}`);
         const hash = ethers.solidityPackedKeccak256(["bytes32", "bytes32"], [campaignId, fingerprint]);
         const sig = await oracleNode.signMessage(ethers.getBytes(hash));
-        await splitter.connect(owner).recordEngagement(campaignId, fingerprint, sig);
+        await splitter.connect(owner).recordEngagement(campaignId, fingerprint, [sig]);
       }
 
       // Check campaign is deactivated
@@ -161,7 +161,7 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
       const nextSig = await oracleNode.signMessage(ethers.getBytes(nextHash));
 
       await expect(
-        splitter.connect(owner).recordEngagement(campaignId, nextFingerprint, nextSig)
+        splitter.connect(owner).recordEngagement(campaignId, nextFingerprint, [nextSig])
       ).to.be.revertedWith("Campaign is not active");
     });
   });
