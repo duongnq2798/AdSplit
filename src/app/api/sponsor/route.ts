@@ -6,6 +6,7 @@ import { supabase, SupabaseDbService } from '@/utils/supabase';
 import { CircleGatewayService } from '@/utils/gateway';
 import { privateKeyToAccount } from 'viem/accounts';
 import { keccak256, encodePacked } from 'viem';
+import { transactionQueue } from '@/utils/transaction-queue';
 
 /**
  * Next.js API Route for Secure Sponsored Gasless Transactions
@@ -201,68 +202,19 @@ export async function POST(request: Request) {
       abiFunctionSignature = 'recordEngagement(bytes32,bytes32,bytes[],uint256[2],uint256[2][2],uint256[2])';
     }
 
-    // 2. If Entity Secret is configured, run secure transaction via Developer-Controlled Wallets SDK
-    if (entitySecret && apiKey && apiKey !== 'sandbox_key') {
-      console.log('[API Sponsor] Processing sponsored txn via Developer-Controlled Wallets SDK...');
-      const walletsClient = initiateDeveloperControlledWalletsClient({
-        apiKey,
-        entitySecret,
-      });
-
-      const response = await walletsClient.createContractExecutionTransaction({
-        walletId,
-        contractAddress,
-        abiFunctionSignature,
-        abiParameters: sponsoredArgs.map((arg: any) => {
-          const deepMap = (item: any): any => {
-            if (Array.isArray(item)) {
-              return item.map(deepMap);
-            }
-            return item.toString();
-          };
-          return deepMap(arg);
-        }),
-        fee: {
-          type: 'level',
-          config: {
-            feeLevel: 'MEDIUM',
-          },
-        },
-        idempotencyKey: 'idempotency_' + Math.random().toString(36).substring(2, 15),
-      });
-
-      return NextResponse.json({ ...response, telemetryScore: 98 });
-    }
-
-    // 3. Default fallback to manual API Relayer (Circle Sandbox) for rapid local dev / prototyping
-    console.log('[API Sponsor] Falling back to manual API Relayer endpoint...');
-    const baseUrl = 'https://api-sandbox.circle.com/v1';
-    const response = await fetch(`${baseUrl}/w3s/developer/transactions/contractExecution`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        walletId,
-        contractAddress,
-        abiMethod: abiFunctionSignature,
-        abiParameters: sponsoredArgs.map((arg: any) => {
-          const deepMap = (item: any): any => {
-            if (Array.isArray(item)) {
-              return item.map(deepMap);
-            }
-            return item.toString();
-          };
-          return deepMap(arg);
-        }),
-        feeLevel: 'MEDIUM',
-        sponsorGas: true,
-      }),
+    // 2. Enqueue transaction for sequential relayer processing to avoid nonce collisions
+    console.log('[API Sponsor] Enqueuing sponsored transaction in sequential execution queue...');
+    const result = await transactionQueue.enqueue({
+      id: Math.random().toString(36).substring(2, 15),
+      walletId,
+      contractAddress,
+      abiFunctionSignature,
+      sponsoredArgs,
+      apiKey,
+      entitySecret
     });
 
-    const data = await response.json();
-    return NextResponse.json({ ...data, telemetryScore: 98 });
+    return NextResponse.json({ ...result, telemetryScore: 98 });
   } catch (error: any) {
     console.error('[API Sponsor] Error executing sponsored transaction:', error);
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
