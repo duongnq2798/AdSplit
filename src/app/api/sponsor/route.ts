@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { initiateDeveloperControlledWalletsClient } from '@circle-fin/developer-controlled-wallets';
 import { signEngagement } from '@/utils/oracle-signer';
 import { verifyTelemetry } from '@/utils/scoring-engine';
-import { supabase } from '@/utils/supabase';
+import { supabase, SupabaseDbService } from '@/utils/supabase';
+import { CircleGatewayService } from '@/utils/gateway';
 
 /**
  * Next.js API Route for Secure Sponsored Gasless Transactions
@@ -52,7 +53,66 @@ export async function POST(request: Request) {
         }, { status: 403 });
       }
 
-      console.log(`[API Sponsor] Telemetry verified genuine (Score: ${telemetryResult.score}). Generating signature...`);
+      console.log(`[API Sponsor] Telemetry verified genuine (Score: ${telemetryResult.score}).`);
+
+      // Retrieve campaign details to check for micropayment (sub-cent CPC)
+      const dbService = new SupabaseDbService();
+      const { data: campaign } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('id', campaignId)
+        .maybeSingle();
+
+      if (campaign && parseFloat(campaign.cost_per_click) < 0.01) {
+        console.log(`[API Sponsor] Sub-cent CPC campaign detected: ${campaign.cost_per_click} USDC. Processing off-chain via x402.`);
+        
+        const { x402Token } = body;
+        if (!x402Token) {
+          return NextResponse.json({ error: 'x402 payment token is required for sub-cent campaigns' }, { status: 400 });
+        }
+
+        const gatewayService = new CircleGatewayService();
+        const paymentResult = await gatewayService.processMicroPayment(x402Token);
+        if (!paymentResult.success) {
+          return NextResponse.json({ error: `Micropayment failed: ${paymentResult.reason}` }, { status: 400 });
+        }
+
+        // Log to click_logs
+        const platformShareBps = campaign.platform_share || 300;
+        const payoutUsdc = parseFloat(campaign.cost_per_click);
+        const platformPayout = (payoutUsdc * platformShareBps) / 10000;
+        const remainingPayout = payoutUsdc - platformPayout;
+
+        // Fetch splits to log correct creator shares
+        const { data: splits } = await supabase
+          .from('campaign_splits')
+          .select('*')
+          .eq('campaign_id', campaignId);
+
+        const firstCreatorPayout = splits && splits.length > 0 
+          ? (remainingPayout * (splits[0].share_bps || 10000)) / 10000 
+          : remainingPayout;
+
+        await dbService.logEngagement({
+          id: clickFingerprint,
+          campaign_id: campaignId,
+          ip_address: ip,
+          status: 'valid',
+          payout_usdc: payoutUsdc,
+          creator_payout_usdc: firstCreatorPayout,
+          platform_payout_usdc: platformPayout,
+          distributor_payout_usdc: remainingPayout - firstCreatorPayout
+        });
+
+        return NextResponse.json({
+          success: true,
+          batched: true,
+          message: 'Micropayment settled in off-chain ledger successfully',
+          telemetryScore: telemetryResult.score
+        });
+      }
+
+      console.log(`[API Sponsor] Generating on-chain signature for standard click...`);
       const signature = await signEngagement(campaignId, clickFingerprint);
       sponsoredArgs = [campaignId, clickFingerprint, signature];
       abiFunctionSignature = 'recordEngagement(bytes32,bytes32,bytes)';
