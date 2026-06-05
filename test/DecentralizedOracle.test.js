@@ -116,6 +116,7 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
       const budget = ethers.parseUnits("10", 6);
       const cpc = ethers.parseUnits("0.05", 6);
       const tx = await splitter.connect(advertiser).createCampaign(
+        await mockUSDC.getAddress(),
         budget,
         cpc,
         [creator1.address],

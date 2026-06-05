@@ -18,6 +18,11 @@ export default {
       url: "https://rpc.testnet.arc.network",
       chainId: 5042002,
       accounts: process.env.DEPLOYER_PRIVATE_KEY ? [process.env.DEPLOYER_PRIVATE_KEY] : []
+    },
+    arcMainnet: {
+      url: "https://rpc.arc.network",
+      chainId: 5042001, // Example Arc Mainnet Chain ID
+      accounts: process.env.DEPLOYER_PRIVATE_KEY ? [process.env.DEPLOYER_PRIVATE_KEY] : []
     }
   }
 };

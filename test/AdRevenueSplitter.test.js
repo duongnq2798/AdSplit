@@ -61,6 +61,7 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
     beforeEach(async function () {
       // Create campaign: 80% creator1, 20% creator2
       const tx = await splitter.connect(advertiser).createCampaign(
+        await mockUSDC.getAddress(),
         budget,
         cpc,
         [creator1.address, creator2.address],
@@ -175,6 +176,7 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
       const cpcAff = ethers.parseUnits("1", 6);
 
       const tx = await splitter.connect(advertiser).createCampaign(
+        await mockUSDC.getAddress(),
         budgetAff,
         cpcAff,
         [creator1.address],

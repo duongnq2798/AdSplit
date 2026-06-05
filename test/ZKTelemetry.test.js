@@ -55,6 +55,7 @@ describe("AdRevenueSplitter Zero-Knowledge Telemetry Verification", function () 
     const budget = ethers.parseUnits("10", 6);
     const cpc = ethers.parseUnits("1", 6);
     const tx = await splitter.connect(advertiser).createCampaign(
+      await mockUSDC.getAddress(),
       budget,
       cpc,
       [creator1.address],

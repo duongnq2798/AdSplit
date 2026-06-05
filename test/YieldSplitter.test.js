@@ -48,6 +48,7 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
     const cpc = ethers.parseUnits("1", 6);
 
     const tx = await splitter.connect(advertiser).createCampaign(
+      await mockUSDC.getAddress(),
       budget,
       cpc,
       [creator1.address],
@@ -77,6 +78,7 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
     const cpc = ethers.parseUnits("1", 6);
 
     const tx = await splitter.connect(advertiser).createCampaign(
+      await mockUSDC.getAddress(),
       budget,
       cpc,
       [creator1.address],
@@ -107,6 +109,7 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
     const cpc = ethers.parseUnits("1", 6);
 
     const tx = await splitter.connect(advertiser).createCampaign(
+      await mockUSDC.getAddress(),
       budget,
       cpc,
       [creator1.address],
@@ -149,6 +152,7 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
     const cpc = ethers.parseUnits("1", 6);
 
     const tx = await splitter.connect(advertiser).createCampaign(
+      await mockUSDC.getAddress(),
       budget,
       cpc,
       [creator1.address],
@@ -187,6 +191,7 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
     const cpc = ethers.parseUnits("1", 6);
 
     const tx = await splitter.connect(advertiser).createCampaign(
+      await mockUSDC.getAddress(),
       budget,
       cpc,
       [creator1.address],

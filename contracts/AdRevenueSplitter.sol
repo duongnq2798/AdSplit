@@ -2,6 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP.
@@ -28,6 +30,9 @@ interface IERC4626 is IERC20 {
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
     function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
     
+    event Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares);
+    event Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares);
+
     function totalAssets() external view returns (uint256);
     function convertToShares(uint256 assets) external view returns (uint256);
     function convertToAssets(uint256 shares) external view returns (uint256);
@@ -56,12 +61,15 @@ interface IVerifier {
  * @notice Decentralized Ad Escrow & Automated Multi-Recipient Revenue Splitter on Arc L1.
  * USDC is the native gas token, but we also interact with ERC-20 USDC (6 decimals).
  */
-contract AdRevenueSplitter is ReentrancyGuard {
+contract AdRevenueSplitter is ReentrancyGuard, Pausable, Ownable {
     
     IERC20 public immutable usdcToken;
     IERC4626 public yieldVault;
-    address public owner;
     address public oracleNode;
+    
+    // Multi-token configuration
+    mapping(address => bool) public allowedTokens;
+    mapping(address => address) public tokenVaults;
     
     // Multi-Oracle state variables for DON
     mapping(address => bool) public isOracleNode;
@@ -108,6 +116,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
     error SignatureLengthInvalid();
     error PlatformFeeBpsTooHigh();
     error RefundFailed();
+    error TokenNotAllowed();
 
     struct SplitShare {
         address recipient;
@@ -124,6 +133,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
         uint128 costPerClick;     // 128 bits. Slot 3 (6 decimals USDC)
         uint128 vaultShares;      // 128 bits. Slot 3 (shares allocated in yieldVault)
         address affiliate;        // 160 bits. Slot 4
+        address tokenAddress;     // 160 bits. Slot 5 (dynamic ERC-20 payment token address)
     }
     
     // Mapping from campaignId to Campaign details
@@ -144,6 +154,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
     event CampaignCreated(
         bytes32 indexed campaignId, 
         address indexed advertiser, 
+        address tokenAddress,
         uint256 totalBudget, 
         uint256 costPerClick
     );
@@ -173,8 +184,8 @@ contract AdRevenueSplitter is ReentrancyGuard {
     event OracleNodeRemoved(address indexed node);
     event OracleThresholdUpdated(uint256 newThreshold);
 
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert OnlyOwner();
+    modifier onlyContractOwner() {
+        if (msg.sender != owner()) revert OnlyOwner();
         _;
     }
     
@@ -183,7 +194,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
         _;
     }
     
-    constructor(address _usdcToken, address _oracleNode, address _platformWallet, address _yieldVault) {
+    constructor(address _usdcToken, address _oracleNode, address _platformWallet, address _yieldVault) Ownable(msg.sender) {
         if (_usdcToken == address(0)) revert InvalidAddress();
         if (_oracleNode == address(0)) revert InvalidAddress();
         if (_platformWallet == address(0)) revert InvalidAddress();
@@ -195,13 +206,15 @@ contract AdRevenueSplitter is ReentrancyGuard {
         oracleThreshold = 1;
         platformWallet = _platformWallet;
         yieldVault = IERC4626(_yieldVault);
-        owner = msg.sender;
+        
+        allowedTokens[_usdcToken] = true;
+        tokenVaults[_usdcToken] = _yieldVault;
     }
     
     /**
      * @notice Set the Oracle node address that reports fraud-free user engagements.
      */
-    function setOracleNode(address _oracleNode) external onlyOwner {
+    function setOracleNode(address _oracleNode) external onlyContractOwner {
         if (_oracleNode == address(0)) revert InvalidAddress();
         emit OracleUpdated(oracleNode, _oracleNode);
         isOracleNode[oracleNode] = false;
@@ -212,7 +225,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
     /**
      * @notice Add a new trusted oracle node.
      */
-    function addOracleNode(address _node) external onlyOwner {
+    function addOracleNode(address _node) external onlyContractOwner {
         if (_node == address(0)) revert InvalidAddress();
         if (isOracleNode[_node]) revert AlreadyOracle();
         isOracleNode[_node] = true;
@@ -222,7 +235,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
     /**
      * @notice Remove a trusted oracle node.
      */
-    function removeOracleNode(address _node) external onlyOwner {
+    function removeOracleNode(address _node) external onlyContractOwner {
         if (!isOracleNode[_node]) revert NotOracle();
         isOracleNode[_node] = false;
         emit OracleNodeRemoved(_node);
@@ -231,7 +244,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
     /**
      * @notice Update the required quorum threshold for consensus.
      */
-    function setOracleThreshold(uint256 _threshold) external onlyOwner {
+    function setOracleThreshold(uint256 _threshold) external onlyContractOwner {
         if (_threshold == 0) revert ThresholdMustBeGreaterThanZero();
         oracleThreshold = _threshold;
         emit OracleThresholdUpdated(_threshold);
@@ -240,7 +253,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
     /**
      * @notice Set the platform revenue wallet.
      */
-    function setPlatformWallet(address _platformWallet) external onlyOwner {
+    function setPlatformWallet(address _platformWallet) external onlyContractOwner {
         if (_platformWallet == address(0)) revert InvalidAddress();
         emit PlatformWalletUpdated(platformWallet, _platformWallet);
         platformWallet = _platformWallet;
@@ -249,7 +262,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
     /**
      * @notice Set platform fee in basis points (e.g. 300 = 3%).
      */
-    function setPlatformFeeBps(uint256 _bps) external onlyOwner {
+    function setPlatformFeeBps(uint256 _bps) external onlyContractOwner {
         if (_bps > 1000) revert PlatformFeeBpsTooHigh();
         emit PlatformFeeUpdated(platformFeeBps, _bps);
         platformFeeBps = _bps;
@@ -258,7 +271,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
     /**
      * @notice Set the yield vault address.
      */
-    function setYieldVault(address _yieldVault) external onlyOwner {
+    function setYieldVault(address _yieldVault) external onlyContractOwner {
         if (_yieldVault == address(0)) revert InvalidAddress();
         emit YieldVaultUpdated(address(yieldVault), _yieldVault);
         yieldVault = IERC4626(_yieldVault);
@@ -267,7 +280,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
     /**
      * @notice Set the ZK Verifier contract address.
      */
-    function setVerifier(address _verifier) external onlyOwner {
+    function setVerifier(address _verifier) external onlyContractOwner {
         if (_verifier == address(0)) revert InvalidAddress();
         emit VerifierUpdated(verifier, _verifier);
         verifier = _verifier;
@@ -275,18 +288,21 @@ contract AdRevenueSplitter is ReentrancyGuard {
     
     /**
      * @notice Create a programmatic ad campaign with stablecoin escrow.
-     * @param _budget Total campaign budget in USDC (6 decimals).
-     * @param _costPerClick Payout amount per valid interaction in USDC (6 decimals).
+     * @param _tokenAddress ERC-20 payment token address (USDC/EURC).
+     * @param _budget Total campaign budget (6 decimals).
+     * @param _costPerClick Payout amount per valid interaction (6 decimals).
      * @param _recipients Dynamic addresses of the split recipients (creators, syndicators).
      * @param _shares Percentage shares of the dynamic recipients (in basis points, sum must be 10000 - platformFee).
      */
     function createCampaign(
+        address _tokenAddress,
         uint256 _budget,
         uint256 _costPerClick,
         address[] calldata _recipients,
         uint256[] calldata _shares,
         address _affiliate
-    ) external nonReentrant returns (bytes32) {
+    ) external nonReentrant whenNotPaused returns (bytes32) {
+        if (!allowedTokens[_tokenAddress]) revert TokenNotAllowed();
         if (_budget == 0) revert BudgetMustBeGreaterThanZero();
         if (_costPerClick == 0) revert CostPerClickMustBeGreaterThanZero();
         if (_costPerClick > _budget) revert CostPerClickExceedsBudget();
@@ -304,21 +320,25 @@ contract AdRevenueSplitter is ReentrancyGuard {
         }
         if (totalShares != BASIS_POINTS) revert InvalidSharesSum();
         
-        // Transfer USDC from advertiser to this contract escrow
-        if (!usdcToken.transferFrom(msg.sender, address(this), _budget)) {
+        // Transfer stablecoin from advertiser to this contract escrow
+        if (!IERC20(_tokenAddress).transferFrom(msg.sender, address(this), _budget)) {
             revert EscrowDepositFailed();
         }
         
-        // Approve yieldVault to spend USDC
-        if (!usdcToken.approve(address(yieldVault), _budget)) {
-            revert ApproveFailed();
-        }
-        
-        // Deposit into vault with slippage protection
-        uint256 expectedShares = yieldVault.previewDeposit(_budget);
-        uint256 shares = yieldVault.deposit(_budget, address(this));
-        if (shares < (expectedShares * 9950) / 10000) {
-            revert DepositSlippageTooHigh();
+        uint256 shares = 0;
+        address vault = tokenVaults[_tokenAddress];
+        if (vault != address(0)) {
+            // Approve yieldVault to spend tokens
+            if (!IERC20(_tokenAddress).approve(vault, _budget)) {
+                revert ApproveFailed();
+            }
+            
+            // Deposit into vault with slippage protection
+            uint256 expectedShares = IERC4626(vault).previewDeposit(_budget);
+            shares = IERC4626(vault).deposit(_budget, address(this));
+            if (shares < (expectedShares * 9950) / 10000) {
+                revert DepositSlippageTooHigh();
+            }
         }
         
         campaignNonce++;
@@ -335,7 +355,8 @@ contract AdRevenueSplitter is ReentrancyGuard {
             totalClicks: 0,
             active: true,
             vaultShares: uint128(shares),
-            affiliate: _affiliate
+            affiliate: _affiliate,
+            tokenAddress: _tokenAddress
         });
         
         if (_affiliate != address(0)) {
@@ -356,24 +377,25 @@ contract AdRevenueSplitter is ReentrancyGuard {
             }
         }
         
-        emit CampaignCreated(campaignId, msg.sender, _budget, _costPerClick);
+        emit CampaignCreated(campaignId, msg.sender, _tokenAddress, _budget, _costPerClick);
         return campaignId;
     }
     
-    function _withdrawFromVault(uint256 _payoutAmount) private returns (uint256) {
-        if (address(yieldVault).code.length == 0) {
-            if (usdcToken.balanceOf(address(this)) >= _payoutAmount) {
+    function _withdrawFromVault(address _tokenAddress, uint256 _payoutAmount) private returns (uint256) {
+        address vault = tokenVaults[_tokenAddress];
+        if (vault == address(0) || vault.code.length == 0) {
+            if (IERC20(_tokenAddress).balanceOf(address(this)) >= _payoutAmount) {
                 return _payoutAmount;
             }
             revert VaultWithdrawalFailed();
         }
 
         uint256 expectedSharesToRedeem = 0;
-        try yieldVault.previewWithdraw(_payoutAmount) returns (uint256 expected) {
+        try IERC4626(vault).previewWithdraw(_payoutAmount) returns (uint256 expected) {
             expectedSharesToRedeem = expected;
         } catch {}
 
-        try yieldVault.withdraw(_payoutAmount, address(this), address(this)) returns (uint256 redeemed) {
+        try IERC4626(vault).withdraw(_payoutAmount, address(this), address(this)) returns (uint256 redeemed) {
             if (expectedSharesToRedeem > 0) {
                 if (redeemed > (expectedSharesToRedeem * 10050) / 10000) {
                     revert VaultWithdrawalFailed();
@@ -381,8 +403,8 @@ contract AdRevenueSplitter is ReentrancyGuard {
             }
             return redeemed;
         } catch {
-            if (usdcToken.balanceOf(address(this)) >= _payoutAmount) {
-                try yieldVault.convertToShares(_payoutAmount) returns (uint256 shares) {
+            if (IERC20(_tokenAddress).balanceOf(address(this)) >= _payoutAmount) {
+                try IERC4626(vault).convertToShares(_payoutAmount) returns (uint256 shares) {
                     return shares;
                 } catch {
                     return _payoutAmount; // Default to 1:1 if vault conversion reverts
@@ -392,24 +414,25 @@ contract AdRevenueSplitter is ReentrancyGuard {
         }
     }
 
-    function _redeemFromVault(uint256 _shares) private returns (uint256) {
-        if (address(yieldVault).code.length == 0) {
-            if (usdcToken.balanceOf(address(this)) >= _shares) {
+    function _redeemFromVault(address _tokenAddress, uint256 _shares) private returns (uint256) {
+        address vault = tokenVaults[_tokenAddress];
+        if (vault == address(0) || vault.code.length == 0) {
+            if (IERC20(_tokenAddress).balanceOf(address(this)) >= _shares) {
                 return _shares;
             }
             revert VaultRedemptionFailed();
         }
 
-        try yieldVault.redeem(_shares, address(this), address(this)) returns (uint256 redeemed) {
+        try IERC4626(vault).redeem(_shares, address(this), address(this)) returns (uint256 redeemed) {
             return redeemed;
         } catch {
             uint256 equivalentAssets = 0;
-            try yieldVault.convertToAssets(_shares) returns (uint256 assets) {
+            try IERC4626(vault).convertToAssets(_shares) returns (uint256 assets) {
                 equivalentAssets = assets;
             } catch {
                 equivalentAssets = _shares; // Default to 1:1 if vault conversion reverts
             }
-            if (usdcToken.balanceOf(address(this)) >= equivalentAssets) {
+            if (IERC20(_tokenAddress).balanceOf(address(this)) >= equivalentAssets) {
                 return equivalentAssets;
             }
             revert VaultRedemptionFailed();
@@ -427,7 +450,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
         uint[2] calldata _a,
         uint[2][2] calldata _b,
         uint[2] calldata _c
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         if (usedFingerprints[_clickFingerprint]) revert FingerprintAlreadyUsed();
         if (_signatures.length < oracleThreshold) revert InsufficientSignatures();
 
@@ -471,7 +494,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
         campaign.totalClicks += 1;
         
         // Withdraw from vault with slippage protection and fallback
-        uint256 sharesRedeemed = _withdrawFromVault(payoutAmount);
+        uint256 sharesRedeemed = _withdrawFromVault(campaign.tokenAddress, payoutAmount);
         
         // Update campaign shares
         if (campaign.vaultShares >= sharesRedeemed) {
@@ -487,7 +510,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
             platformFee = (payoutAmount * 500) / BASIS_POINTS;
             distributeAmount = payoutAmount - platformFee;
             if (platformFee > 0) {
-                if (!usdcToken.transfer(platformWallet, platformFee)) {
+                if (!IERC20(campaign.tokenAddress).transfer(platformWallet, platformFee)) {
                     revert PlatformFeeTransferFailed();
                 }
             }
@@ -496,7 +519,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
             for (uint256 i = 0; i < splitsLen; i++) {
                 uint256 recipientAmount = (payoutAmount * splits[i].shareBps) / BASIS_POINTS;
                 if (recipientAmount > 0) {
-                    if (!usdcToken.transfer(splits[i].recipient, recipientAmount)) {
+                    if (!IERC20(campaign.tokenAddress).transfer(splits[i].recipient, recipientAmount)) {
                         revert RecipientPaymentFailed();
                     }
                     emit RecipientPaid(_campaignId, splits[i].recipient, recipientAmount);
@@ -506,7 +529,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
             platformFee = (payoutAmount * platformFeeBps) / BASIS_POINTS;
             distributeAmount = payoutAmount - platformFee;
             if (platformFee > 0) {
-                if (!usdcToken.transfer(platformWallet, platformFee)) {
+                if (!IERC20(campaign.tokenAddress).transfer(platformWallet, platformFee)) {
                     revert PlatformFeeTransferFailed();
                 }
             }
@@ -515,7 +538,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
             for (uint256 i = 0; i < splitsLen; i++) {
                 uint256 recipientAmount = (distributeAmount * splits[i].shareBps) / BASIS_POINTS;
                 if (recipientAmount > 0) {
-                    if (!usdcToken.transfer(splits[i].recipient, recipientAmount)) {
+                    if (!IERC20(campaign.tokenAddress).transfer(splits[i].recipient, recipientAmount)) {
                         revert RecipientPaymentFailed();
                     }
                     emit RecipientPaid(_campaignId, splits[i].recipient, recipientAmount);
@@ -534,9 +557,9 @@ contract AdRevenueSplitter is ReentrancyGuard {
             
             uint256 refundAmount = 0;
             if (remainingShares > 0) {
-                refundAmount = _redeemFromVault(remainingShares);
+                refundAmount = _redeemFromVault(campaign.tokenAddress, remainingShares);
                 if (refundAmount > 0) {
-                    if (!usdcToken.transfer(campaign.advertiser, refundAmount)) {
+                    if (!IERC20(campaign.tokenAddress).transfer(campaign.advertiser, refundAmount)) {
                         revert RefundFailed();
                     }
                 }
@@ -549,14 +572,14 @@ contract AdRevenueSplitter is ReentrancyGuard {
      * @notice Execute a batch of engagement payouts off-chain validated by the oracle/settler.
      * @param _campaignIds Array of campaign IDs.
      * @param _creators Array of creator/recipient addresses.
-     * @param _amounts Array of micro-settlement amounts in USDC (6 decimals).
+     * @param _amounts Array of micro-settlement amounts in USDC/EURC (6 decimals).
      */
     function executeBatchEngagement(
         bytes32[] calldata _campaignIds,
         address[] calldata _creators,
         uint256[] calldata _amounts
-    ) external nonReentrant {
-        if (!isOracleNode[msg.sender] && msg.sender != owner) revert OnlyOracleNode();
+    ) external nonReentrant whenNotPaused {
+        if (!isOracleNode[msg.sender] && msg.sender != owner()) revert OnlyOracleNode();
         if (_campaignIds.length != _creators.length) revert MismatchedRecipientsAndShares();
         if (_creators.length != _amounts.length) revert MismatchedRecipientsAndShares();
 
@@ -576,7 +599,7 @@ contract AdRevenueSplitter is ReentrancyGuard {
             campaign.totalClicks += 1;
             
             // Withdraw from vault
-            uint256 sharesRedeemed = _withdrawFromVault(amount);
+            uint256 sharesRedeemed = _withdrawFromVault(campaign.tokenAddress, amount);
             
             if (campaign.vaultShares >= sharesRedeemed) {
                 campaign.vaultShares -= uint128(sharesRedeemed);
@@ -593,18 +616,18 @@ contract AdRevenueSplitter is ReentrancyGuard {
                 distributeAmount = amount - platformFee - affiliateFee;
                 
                 if (platformFee > 0) {
-                    if (!usdcToken.transfer(platformWallet, platformFee)) {
+                    if (!IERC20(campaign.tokenAddress).transfer(platformWallet, platformFee)) {
                         revert PlatformFeeTransferFailed();
                     }
                 }
                 if (affiliateFee > 0) {
-                    if (!usdcToken.transfer(campaign.affiliate, affiliateFee)) {
+                    if (!IERC20(campaign.tokenAddress).transfer(campaign.affiliate, affiliateFee)) {
                         revert AffiliateFeeTransferFailed();
                     }
                     emit RecipientPaid(campaignId, campaign.affiliate, affiliateFee);
                 }
                 if (distributeAmount > 0) {
-                    if (!usdcToken.transfer(creator, distributeAmount)) {
+                    if (!IERC20(campaign.tokenAddress).transfer(creator, distributeAmount)) {
                         revert CreatorPaymentFailed();
                     }
                     emit RecipientPaid(campaignId, creator, distributeAmount);
@@ -615,12 +638,12 @@ contract AdRevenueSplitter is ReentrancyGuard {
                 distributeAmount = amount - platformFee;
                 
                 if (platformFee > 0) {
-                    if (!usdcToken.transfer(platformWallet, platformFee)) {
+                    if (!IERC20(campaign.tokenAddress).transfer(platformWallet, platformFee)) {
                         revert PlatformFeeTransferFailed();
                     }
                 }
                 if (distributeAmount > 0) {
-                    if (!usdcToken.transfer(creator, distributeAmount)) {
+                    if (!IERC20(campaign.tokenAddress).transfer(creator, distributeAmount)) {
                         revert CreatorPaymentFailed();
                     }
                     emit RecipientPaid(campaignId, creator, distributeAmount);
@@ -637,9 +660,9 @@ contract AdRevenueSplitter is ReentrancyGuard {
                 
                 uint256 refundAmount = 0;
                 if (remainingShares > 0) {
-                    refundAmount = _redeemFromVault(remainingShares);
+                    refundAmount = _redeemFromVault(campaign.tokenAddress, remainingShares);
                     if (refundAmount > 0) {
-                        if (!usdcToken.transfer(campaign.advertiser, refundAmount)) {
+                        if (!IERC20(campaign.tokenAddress).transfer(campaign.advertiser, refundAmount)) {
                             revert RefundFailed();
                         }
                     }
@@ -686,9 +709,9 @@ contract AdRevenueSplitter is ReentrancyGuard {
         
         uint256 refundAmount = 0;
         if (refundShares > 0) {
-            refundAmount = _redeemFromVault(refundShares);
+            refundAmount = _redeemFromVault(campaign.tokenAddress, refundShares);
             if (refundAmount > 0) {
-                if (!usdcToken.transfer(msg.sender, refundAmount)) {
+                if (!IERC20(campaign.tokenAddress).transfer(msg.sender, refundAmount)) {
                     revert WithdrawRefundFailed();
                 }
             }
@@ -705,7 +728,11 @@ contract AdRevenueSplitter is ReentrancyGuard {
         if (!campaign.active || campaign.vaultShares == 0) {
             return 0;
         }
-        uint256 currentAssets = yieldVault.convertToAssets(campaign.vaultShares);
+        address vault = tokenVaults[campaign.tokenAddress];
+        if (vault == address(0)) {
+            return 0;
+        }
+        uint256 currentAssets = IERC4626(vault).convertToAssets(campaign.vaultShares);
         if (currentAssets > campaign.remainingBudget) {
             return currentAssets - campaign.remainingBudget;
         }
@@ -725,5 +752,45 @@ contract AdRevenueSplitter is ReentrancyGuard {
             shares[i] = splits[i].shareBps;
         }
         return (recipients, shares);
+    }
+
+    /**
+     * @notice Pause contract operations in an emergency.
+     */
+    function pause() external onlyContractOwner {
+        _pause();
+    }
+
+    /**
+     * @notice Unpause contract operations.
+     */
+    function unpause() external onlyContractOwner {
+        _unpause();
+    }
+
+    /**
+     * @notice Toggle dynamic token validation allowance.
+     */
+    function setAllowedToken(address _token, bool _allowed) external onlyContractOwner {
+        if (_token == address(0)) revert InvalidAddress();
+        allowedTokens[_token] = _allowed;
+    }
+
+    /**
+     * @notice Set token-specific yield vault.
+     */
+    function setTokenVault(address _token, address _vault) external onlyContractOwner {
+        if (_token == address(0)) revert InvalidAddress();
+        tokenVaults[_token] = _vault;
+    }
+
+    /**
+     * @notice Emergency sweep of any ERC20 token to the owner address.
+     */
+    function emergencySweepToken(address _tokenAddress, uint256 _amount) external onlyContractOwner {
+        if (_tokenAddress == address(0)) revert InvalidAddress();
+        if (!IERC20(_tokenAddress).transfer(owner(), _amount)) {
+            revert RefundFailed();
+        }
     }
 }

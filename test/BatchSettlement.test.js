@@ -47,6 +47,7 @@ describe("AdRevenueSplitter Batch Micropayment Settlements (x402)", function () 
 
     // Create campaign: split equally between creator1 and creator2
     const tx = await splitter.connect(advertiser).createCampaign(
+      await mockUSDC.getAddress(),
       budget,
       cpc,
       [creator1.address, creator2.address],
@@ -110,6 +111,7 @@ describe("AdRevenueSplitter Batch Micropayment Settlements (x402)", function () 
     const cpc = ethers.parseUnits("0.02", 6);
 
     const tx = await splitter.connect(advertiser).createCampaign(
+      await mockUSDC.getAddress(),
       budget,
       cpc,
       [creator1.address],
