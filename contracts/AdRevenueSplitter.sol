@@ -373,6 +373,79 @@ contract AdRevenueSplitter {
     }
 
     /**
+     * @notice Execute a batch of engagement payouts off-chain validated by the oracle/settler.
+     * @param _campaignIds Array of campaign IDs.
+     * @param _creators Array of creator/recipient addresses.
+     * @param _amounts Array of micro-settlement amounts in USDC (6 decimals).
+     */
+    function executeBatchEngagement(
+        bytes32[] calldata _campaignIds,
+        address[] calldata _creators,
+        uint256[] calldata _amounts
+    ) external {
+        require(msg.sender == oracleNode || msg.sender == owner, "Only authorized settler can call");
+        require(_campaignIds.length == _creators.length, "Mismatched campaigns and creators");
+        require(_creators.length == _amounts.length, "Mismatched creators and amounts");
+
+        for (uint256 i = 0; i < _campaignIds.length; i++) {
+            bytes32 campaignId = _campaignIds[i];
+            address creator = _creators[i];
+            uint256 amount = _amounts[i];
+            
+            if (amount == 0) continue;
+
+            Campaign storage campaign = campaigns[campaignId];
+            require(campaign.active, "Campaign is not active");
+            require(campaign.remainingBudget >= amount, "Campaign budget exhausted");
+
+            campaign.remainingBudget -= amount;
+            campaign.totalClicks += 1;
+            
+            // Withdraw from vault
+            uint256 sharesRedeemed = _withdrawFromVault(amount);
+            
+            if (campaign.vaultShares >= sharesRedeemed) {
+                campaign.vaultShares -= sharesRedeemed;
+            } else {
+                campaign.vaultShares = 0;
+            }
+
+            // Split platform fee and recipient amount
+            uint256 platformFee = (amount * platformFeeBps) / BASIS_POINTS;
+            uint256 distributeAmount = amount - platformFee;
+
+            if (platformFee > 0) {
+                require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+            }
+
+            if (distributeAmount > 0) {
+                require(usdcToken.transfer(creator, distributeAmount), "Creator payment failed");
+                emit RecipientPaid(campaignId, creator, distributeAmount);
+            }
+
+            emit RevenueSplitExecuted(campaignId, amount, platformFee, distributeAmount);
+
+            if (campaign.remainingBudget < campaign.costPerClick) {
+                campaign.active = false;
+                
+                uint256 remainingShares = campaign.vaultShares;
+                campaign.vaultShares = 0;
+                campaign.remainingBudget = 0;
+                
+                uint256 refundAmount = 0;
+                if (remainingShares > 0) {
+                    refundAmount = _redeemFromVault(remainingShares);
+                    if (refundAmount > 0) {
+                        require(usdcToken.transfer(campaign.advertiser, refundAmount), "Refund failed");
+                    }
+                }
+                emit CampaignClosed(campaignId, refundAmount);
+            }
+        }
+    }
+
+
+    /**
      * @notice Helper to recover the signer address from an EIP-191 signature.
      */
     function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory _sig) public pure returns (address) {
