@@ -64,7 +64,8 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
         budget,
         cpc,
         [creator1.address, creator2.address],
-        [8000, 2000] // 80% and 20% shares
+        [8000, 2000], // 80% and 20% shares
+        ethers.ZeroAddress
       );
       const receipt = await tx.wait();
 
@@ -166,6 +167,50 @@ describe("AdRevenueSplitter Cryptographic Signature Tests", function () {
       await expect(
         splitter.connect(owner).recordEngagement(campaignId, nextFingerprint, [nextSig], proofA, proofB, proofC)
       ).to.be.revertedWith("Campaign is not active");
+    });
+
+    it("should support affiliate address splits with 80% Creator, 15% Affiliate, 5% Platform", async function () {
+      const affiliate = creator2.address;
+      const budgetAff = ethers.parseUnits("5", 6);
+      const cpcAff = ethers.parseUnits("1", 6);
+
+      const tx = await splitter.connect(advertiser).createCampaign(
+        budgetAff,
+        cpcAff,
+        [creator1.address],
+        [10000],
+        affiliate
+      );
+      const receipt = await tx.wait();
+      const event = receipt.logs
+        .map((log) => {
+          try {
+            return splitter.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .find((parsed) => parsed && parsed.name === "CampaignCreated");
+      const campId = event.args.campaignId;
+
+      // Log click
+      const finger = ethers.id("click_affiliate_123");
+      const hash = ethers.solidityPackedKeccak256(["bytes32", "bytes32"], [campId, finger]);
+      const sig = await oracleNode.signMessage(ethers.getBytes(hash));
+
+      const initialCreatorBal = await mockUSDC.balanceOf(creator1.address);
+      const initialAffiliateBal = await mockUSDC.balanceOf(affiliate);
+      const initialPlatformBal = await mockUSDC.balanceOf(platformWallet.address);
+
+      await splitter.connect(owner).recordEngagement(campId, finger, [sig], proofA, proofB, proofC);
+
+      const finalCreatorBal = await mockUSDC.balanceOf(creator1.address);
+      const finalAffiliateBal = await mockUSDC.balanceOf(affiliate);
+      const finalPlatformBal = await mockUSDC.balanceOf(platformWallet.address);
+
+      expect(finalCreatorBal - initialCreatorBal).to.equal(800000);
+      expect(finalAffiliateBal - initialAffiliateBal).to.equal(150000);
+      expect(finalPlatformBal - initialPlatformBal).to.equal(50000);
     });
   });
 });

@@ -83,6 +83,7 @@ contract AdRevenueSplitter {
         uint256 totalClicks;
         bool active;
         uint256 vaultShares;      // shares allocated to the campaign in yieldVault
+        address affiliate;        // affiliate address for referral splits
     }
     
     // Mapping from campaignId to Campaign details
@@ -243,7 +244,8 @@ contract AdRevenueSplitter {
         uint256 _budget,
         uint256 _costPerClick,
         address[] calldata _recipients,
-        uint256[] calldata _shares
+        uint256[] calldata _shares,
+        address _affiliate
     ) external returns (bytes32) {
         require(_budget > 0, "Budget must be greater than zero");
         require(_costPerClick > 0, "Cost per click must be greater than zero");
@@ -262,7 +264,7 @@ contract AdRevenueSplitter {
         // Transfer USDC from advertiser to this contract escrow
         require(
             usdcToken.transferFrom(msg.sender, address(this), _budget),
-            "USDC escrow deposit failed"
+            "USDC escrow escrow deposit failed"
         );
         
         // Approve yieldVault to spend USDC
@@ -289,14 +291,26 @@ contract AdRevenueSplitter {
             costPerClick: _costPerClick,
             totalClicks: 0,
             active: true,
-            vaultShares: shares
+            vaultShares: shares,
+            affiliate: _affiliate
         });
         
-        for (uint256 i = 0; i < _recipients.length; i++) {
+        if (_affiliate != address(0)) {
             campaignSplits[campaignId].push(SplitShare({
-                recipient: _recipients[i],
-                shareBps: _shares[i]
+                recipient: _recipients[0],
+                shareBps: 8000
             }));
+            campaignSplits[campaignId].push(SplitShare({
+                recipient: _affiliate,
+                shareBps: 1500
+            }));
+        } else {
+            for (uint256 i = 0; i < _recipients.length; i++) {
+                campaignSplits[campaignId].push(SplitShare({
+                    recipient: _recipients[i],
+                    shareBps: _shares[i]
+                }));
+            }
         }
         
         emit CampaignCreated(campaignId, msg.sender, _budget, _costPerClick);
@@ -419,20 +433,35 @@ contract AdRevenueSplitter {
         }
         
         // Split payout
-        uint256 platformFee = (payoutAmount * platformFeeBps) / BASIS_POINTS;
-        uint256 distributeAmount = payoutAmount - platformFee;
-        
-        // Transfer platform fee
-        if (platformFee > 0) {
-            require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
-        }
-        
-        SplitShare[] storage splits = campaignSplits[_campaignId];
-        for (uint256 i = 0; i < splits.length; i++) {
-            uint256 recipientAmount = (distributeAmount * splits[i].shareBps) / BASIS_POINTS;
-            if (recipientAmount > 0) {
-                require(usdcToken.transfer(splits[i].recipient, recipientAmount), "Recipient payment failed");
-                emit RecipientPaid(_campaignId, splits[i].recipient, recipientAmount);
+        uint256 platformFee;
+        uint256 distributeAmount;
+        if (campaign.affiliate != address(0)) {
+            platformFee = (payoutAmount * 500) / BASIS_POINTS;
+            distributeAmount = payoutAmount - platformFee;
+            if (platformFee > 0) {
+                require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+            }
+            SplitShare[] storage splits = campaignSplits[_campaignId];
+            for (uint256 i = 0; i < splits.length; i++) {
+                uint256 recipientAmount = (payoutAmount * splits[i].shareBps) / BASIS_POINTS;
+                if (recipientAmount > 0) {
+                    require(usdcToken.transfer(splits[i].recipient, recipientAmount), "Recipient payment failed");
+                    emit RecipientPaid(_campaignId, splits[i].recipient, recipientAmount);
+                }
+            }
+        } else {
+            platformFee = (payoutAmount * platformFeeBps) / BASIS_POINTS;
+            distributeAmount = payoutAmount - platformFee;
+            if (platformFee > 0) {
+                require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+            }
+            SplitShare[] storage splits = campaignSplits[_campaignId];
+            for (uint256 i = 0; i < splits.length; i++) {
+                uint256 recipientAmount = (distributeAmount * splits[i].shareBps) / BASIS_POINTS;
+                if (recipientAmount > 0) {
+                    require(usdcToken.transfer(splits[i].recipient, recipientAmount), "Recipient payment failed");
+                    emit RecipientPaid(_campaignId, splits[i].recipient, recipientAmount);
+                }
             }
         }
         
@@ -495,19 +524,38 @@ contract AdRevenueSplitter {
             }
 
             // Split platform fee and recipient amount
-            uint256 platformFee = (amount * platformFeeBps) / BASIS_POINTS;
-            uint256 distributeAmount = amount - platformFee;
-
-            if (platformFee > 0) {
-                require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+            uint256 platformFee;
+            uint256 distributeAmount;
+            if (campaign.affiliate != address(0)) {
+                platformFee = (amount * 500) / BASIS_POINTS;
+                uint256 affiliateFee = (amount * 1500) / BASIS_POINTS;
+                distributeAmount = amount - platformFee - affiliateFee;
+                
+                if (platformFee > 0) {
+                    require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+                }
+                if (affiliateFee > 0) {
+                    require(usdcToken.transfer(campaign.affiliate, affiliateFee), "Affiliate fee transfer failed");
+                    emit RecipientPaid(campaignId, campaign.affiliate, affiliateFee);
+                }
+                if (distributeAmount > 0) {
+                    require(usdcToken.transfer(creator, distributeAmount), "Creator payment failed");
+                    emit RecipientPaid(campaignId, creator, distributeAmount);
+                }
+                emit RevenueSplitExecuted(campaignId, amount, platformFee, distributeAmount + affiliateFee);
+            } else {
+                platformFee = (amount * platformFeeBps) / BASIS_POINTS;
+                distributeAmount = amount - platformFee;
+                
+                if (platformFee > 0) {
+                    require(usdcToken.transfer(platformWallet, platformFee), "Platform fee transfer failed");
+                }
+                if (distributeAmount > 0) {
+                    require(usdcToken.transfer(creator, distributeAmount), "Creator payment failed");
+                    emit RecipientPaid(campaignId, creator, distributeAmount);
+                }
+                emit RevenueSplitExecuted(campaignId, amount, platformFee, distributeAmount);
             }
-
-            if (distributeAmount > 0) {
-                require(usdcToken.transfer(creator, distributeAmount), "Creator payment failed");
-                emit RecipientPaid(campaignId, creator, distributeAmount);
-            }
-
-            emit RevenueSplitExecuted(campaignId, amount, platformFee, distributeAmount);
 
             if (campaign.remainingBudget < campaign.costPerClick) {
                 campaign.active = false;

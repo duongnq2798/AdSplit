@@ -50,7 +50,8 @@ describe("AdRevenueSplitter Batch Micropayment Settlements (x402)", function () 
       budget,
       cpc,
       [creator1.address, creator2.address],
-      [5000, 5000]
+      [5000, 5000],
+      ethers.ZeroAddress
     );
     const receipt = await tx.wait();
 
@@ -112,7 +113,8 @@ describe("AdRevenueSplitter Batch Micropayment Settlements (x402)", function () 
       budget,
       cpc,
       [creator1.address],
-      [10000]
+      [10000],
+      ethers.ZeroAddress
     );
     const receipt = await tx.wait();
     const event = receipt.logs

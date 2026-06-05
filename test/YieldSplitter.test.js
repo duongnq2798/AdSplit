@@ -51,7 +51,8 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
       budget,
       cpc,
       [creator1.address],
-      [10000]
+      [10000],
+      ethers.ZeroAddress
     );
     const receipt = await tx.wait();
 
@@ -79,7 +80,8 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
       budget,
       cpc,
       [creator1.address],
-      [10000]
+      [10000],
+      ethers.ZeroAddress
     );
     const receipt = await tx.wait();
 
@@ -108,7 +110,8 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
       budget,
       cpc,
       [creator1.address],
-      [10000]
+      [10000],
+      ethers.ZeroAddress
     );
     const receipt = await tx.wait();
 
@@ -149,7 +152,8 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
       budget,
       cpc,
       [creator1.address],
-      [10000]
+      [10000],
+      ethers.ZeroAddress
     );
     const receipt = await tx.wait();
 
@@ -186,7 +190,8 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
       budget,
       cpc,
       [creator1.address],
-      [10000]
+      [10000],
+      ethers.ZeroAddress
     );
     const receipt = await tx.wait();
 

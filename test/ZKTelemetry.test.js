@@ -58,7 +58,8 @@ describe("AdRevenueSplitter Zero-Knowledge Telemetry Verification", function () 
       budget,
       cpc,
       [creator1.address],
-      [10000]
+      [10000],
+      ethers.ZeroAddress
     );
     const receipt = await tx.wait();
     const event = receipt.logs
