@@ -149,4 +149,134 @@ export class SupabaseDbService {
       return false;
     }
   }
+
+  /**
+   * Safely increment a creator's micro-payout balance for a campaign
+   */
+  async incrementMicroBalance(campaignId: string, creatorAddress: string, amount: number): Promise<boolean> {
+    try {
+      const { error } = await supabase.rpc('increment_micro_balance', {
+        p_campaign_id: campaignId,
+        p_creator_address: creatorAddress,
+        p_amount: amount
+      });
+      if (error) throw error;
+      return true;
+    } catch (e: any) {
+      console.error('Failed to increment micro balance:', e?.message || e);
+      return false;
+    }
+  }
+
+  /**
+   * Lock micro balances exceeding a threshold for batch settlement on-chain
+   */
+  async lockMicroBalancesForSettlement(threshold: number): Promise<{ campaign_id: string; creator_address: string; settling_amount: number }[]> {
+    try {
+      const { data, error } = await supabase.rpc('lock_micro_balances_for_settlement', {
+        threshold_val: threshold
+      });
+      if (error) throw error;
+      return data || [];
+    } catch (e: any) {
+      console.error('Failed to lock micro balances for settlement:', e?.message || e);
+      return [];
+    }
+  }
+
+  /**
+   * Confirm successful batch settlement on-chain, subtracting from total balance
+   */
+  async confirmSettlement(campaignId: string, creatorAddress: string, amount: number): Promise<boolean> {
+    try {
+      const { error } = await supabase.rpc('confirm_micro_settlement', {
+        p_campaign_id: campaignId,
+        p_creator_address: creatorAddress,
+        p_amount: amount
+      });
+      if (error) throw error;
+      return true;
+    } catch (e: any) {
+      console.error('Failed to confirm settlement:', e?.message || e);
+      return false;
+    }
+  }
+
+  /**
+   * Rollback a failed batch settlement, resetting the settling amount back to available balance
+   */
+  async rollbackSettlement(campaignId: string, creatorAddress: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.rpc('rollback_micro_settlement', {
+        p_campaign_id: campaignId,
+        p_creator_address: creatorAddress
+      });
+      if (error) throw error;
+      return true;
+    } catch (e: any) {
+      console.error('Failed to rollback settlement:', e?.message || e);
+      return false;
+    }
+  }
+
+  /**
+   * Deposit USDC to Circle Gateway off-chain balance ledger for an advertiser
+   */
+  async depositToGateway(advertiser: string, amount: number): Promise<boolean> {
+    try {
+      const { error } = await supabase.rpc('deposit_to_gateway', {
+        p_advertiser: advertiser,
+        p_amount: amount
+      });
+      if (error) throw error;
+      return true;
+    } catch (e: any) {
+      console.error('Failed to deposit to gateway:', e?.message || e);
+      return false;
+    }
+  }
+
+  /**
+   * Deduct advertiser's gateway balance during micropayments (x402 clicks)
+   */
+  async deductGatewayBalance(advertiser: string, amount: number): Promise<boolean> {
+    try {
+      const { data, error } = await supabase.rpc('deduct_gateway_balance', {
+        p_advertiser: advertiser,
+        p_amount: amount
+      });
+      if (error) throw error;
+      return !!data;
+    } catch (e: any) {
+      console.error('Failed to deduct gateway balance:', e?.message || e);
+      return false;
+    }
+  }
+
+  /**
+   * Retrieve current gateway balance of an advertiser
+   */
+  async getGatewayBalance(advertiser: string): Promise<number> {
+    try {
+      const { data, error } = await supabase
+        .from('gateway_deposits')
+        .select('balance')
+        .eq('advertiser_address', advertiser)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? parseFloat(data.balance) : 0;
+    } catch (e: any) {
+      console.error('Failed to get gateway balance:', e?.message || e);
+      return 0;
+    }
+  }
 }
+
+export interface DbMicroBalance {
+  campaign_id: string;
+  creator_address: string;
+  balance: number;
+  settling_amount: number;
+  updated_at?: string;
+}
+
