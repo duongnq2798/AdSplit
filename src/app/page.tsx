@@ -610,16 +610,13 @@ export default function Home() {
       const coAuthorShare = (85 - newCreatorShare) * 100;
       const distributorShare = 1500; // Remaining 15% to reach 10000 total shares (100%)
 
-      // ── Pre-flight: check if the contract address has bytecode deployed ──
-      setStatusModal({
-        show: true,
-        title: "Verifying Contract",
-        message: "Checking if the AdRevenueSplitter contract is deployed on Arc Testnet...",
-        type: "loading"
-      });
-
-      const contractBytecode = await publicClient.getCode({ address: formattedContractAddress });
-      const isContractDeployed = contractBytecode && contractBytecode !== "0x" && contractBytecode.length > 2;
+      let isContractDeployed = false;
+      try {
+        const contractBytecode = await publicClient.getCode({ address: formattedContractAddress });
+        isContractDeployed = !!(contractBytecode && contractBytecode !== "0x" && contractBytecode.length > 2);
+      } catch (err) {
+        console.warn("[AdSplit Sandbox] RPC connection failed. Defaulting to Sandbox Demo Mode.", err);
+      }
 
       if (!isContractDeployed) {
         // ════════════════════════════════════════════════════════════════
@@ -921,8 +918,13 @@ export default function Home() {
       const formattedContractAddress = getAddress(contractAddress.trim().toLowerCase());
 
       // Pre-flight: check if the contract address has bytecode deployed
-      const contractBytecode = await publicClient.getCode({ address: formattedContractAddress });
-      const isContractDeployed = contractBytecode && contractBytecode !== "0x" && contractBytecode.length > 2;
+      let isContractDeployed = false;
+      try {
+        const contractBytecode = await publicClient.getCode({ address: formattedContractAddress });
+        isContractDeployed = !!(contractBytecode && contractBytecode !== "0x" && contractBytecode.length > 2);
+      } catch (err) {
+        console.warn("[AdSplit Sandbox] RPC connection failed. Defaulting to Sandbox withdraw.", err);
+      }
 
       if (!isContractDeployed) {
         // SANDBOX MODE — just update Supabase
@@ -1285,17 +1287,32 @@ export default function Home() {
         }
       }
 
-      const txResult = await circleService.sponsorGaslessTransaction(
-        "developer_wallet_id",
-        contractAddress,
-        "recordEngagement",
-        [campaignId, keccak256(stringToBytes(clickId))],
-        telemetryPayload,
-        zkProof
-      );
+      // Check if contract is deployed before on-chain execution
+      let isContractDeployed = false;
+      try {
+        const formattedContractAddress = getAddress(contractAddress.trim().toLowerCase());
+        const contractBytecode = await publicClient.getCode({ address: formattedContractAddress });
+        isContractDeployed = !!(contractBytecode && contractBytecode !== "0x" && contractBytecode.length > 2);
+      } catch (e) {
+        console.warn("[AdSplit Sandbox] RPC connection failed. Defaulting to Sandbox Click.");
+      }
 
-      if (txResult.error) {
-        throw new Error(txResult.error);
+      if (isContractDeployed) {
+        const txResult = await circleService.sponsorGaslessTransaction(
+          "developer_wallet_id",
+          contractAddress,
+          "recordEngagement",
+          [campaignId, keccak256(stringToBytes(clickId))],
+          telemetryPayload,
+          zkProof
+        );
+
+        if (txResult.error) {
+          throw new Error(txResult.error);
+        }
+      } else {
+        console.log("[AdSplit Sandbox] Contract not deployed. Simulating gasless settlement in Sandbox Mode...");
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
       setStep(3);
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -1656,6 +1673,14 @@ export default function Home() {
                 <Terminal className="h-4 w-4" />
                 Live Activity History
               </button>
+
+              <a 
+                href="/admin"
+                className="px-5 py-2.5 rounded-full border-3 border-[#744D2B] bg-[#FCFAF6] hover:bg-[#F3EFE6] text-[#744D2B] shadow-[0_2px_0_#744D2B] hover:-translate-y-0.5 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Settings className="h-4 w-4" />
+                Admin Console
+              </a>
             </div>
 
             {/* Connected wallet widget styled dynamically using RainbowKit */}
