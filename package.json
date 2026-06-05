@@ -12,7 +12,9 @@
   "dependencies": {
     "@circle-fin/adapter-viem-v2": "^1.11.1",
     "@circle-fin/app-kit": "^1.6.1",
+    "@circle-fin/bridge-kit": "^1.10.2",
     "@circle-fin/developer-controlled-wallets": "^10.3.1",
+    "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
     "@rainbow-me/rainbowkit": "^2.2.11",
     "@supabase/supabase-js": "^2.106.1",
     "@tanstack/react-query": "^5.100.11",
@@ -21,8 +23,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "viem": "^2.50.4",
-    "wagmi": "^3.6.15",
-    "@circle-fin/w3s-pw-web-sdk": "^1.1.11"
+    "wagmi": "^3.6.15"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.2",
