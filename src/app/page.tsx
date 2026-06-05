@@ -25,6 +25,7 @@ import {
 } from "@/utils/supabase";
 import { CircleIntegrationService } from "@/utils/circle";
 import WalletOnboardingModal from "@/components/WalletOnboardingModal";
+import { BridgeProgressTracker } from "@/components/BridgeProgressTracker";
 import { circleUCWService } from "@/utils/circle-ucw";
 import { 
   ButtonLoader, 
@@ -294,9 +295,17 @@ export default function Home() {
   
   // CCTP Bridge Form
   const [bridgeAmount, setBridgeAmount] = useState("2");
-  const [bridgeSourceChain, setBridgeSourceChain] = useState("ethereum");
+  const [bridgeSourceChain, setBridgeSourceChain] = useState("Ethereum");
   const [bridgeActive, setBridgeActive] = useState(false);
   const [bridgeStep, setBridgeStep] = useState(0);
+  const [bridgeSteps, setBridgeSteps] = useState<any[]>([
+    { label: "USDC Burn Approval", description: "Approve the TokenMessenger to spend source USDC", status: "idle" },
+    { label: "Initiate CCTP Burn", description: "Execute depositForBurn on source TokenMessenger", status: "idle" },
+    { label: "Fetch Circle Attestation", description: "Poll Circle Iris API for signed proof", status: "idle" },
+    { label: "Mint Claiming on Arc", description: "Relay signed attestation to Arc MessageTransmitter", status: "idle" }
+  ]);
+  const [showBridgeTracker, setShowBridgeTracker] = useState(false);
+  const [estRemainingTime, setEstRemainingTime] = useState("0s");
 
   // Bot attack
   const [botAttackActive, setBotAttackActive] = useState(false);
@@ -1009,56 +1018,188 @@ export default function Home() {
     const amountNum = parseFloat(bridgeAmount);
     if (isNaN(amountNum) || amountNum <= 0) return;
 
+    const initialSteps = [
+      { label: "USDC Burn Approval", description: "Approve the TokenMessenger to spend source USDC", status: "running" as const },
+      { label: "Initiate CCTP Burn", description: "Execute depositForBurn on source TokenMessenger", status: "running" as const },
+      { label: "Fetch Circle Attestation", description: "Poll Circle Iris API for signed proof", status: "idle" as const },
+      { label: "Mint Claiming on Arc", description: "Relay signed attestation to Arc MessageTransmitter", status: "idle" as const }
+    ];
+    setBridgeSteps(initialSteps);
     setBridgeActive(true);
-    setBridgeStep(1);
+    setShowBridgeTracker(true);
+
+    const isSepolia = bridgeSourceChain === "Ethereum";
+    let countdown = isSepolia ? 150 : 60;
+    setEstRemainingTime(`${countdown}s`);
+
+    const timer = setInterval(() => {
+      countdown = Math.max(0, countdown - 1);
+      setEstRemainingTime(`${countdown}s`);
+    }, 1000);
 
     try {
       setStatusModal({
         show: true,
-        title: "Attesting Circle CCTP",
+        title: "Initiating CCTP Teleport",
         message: `Requesting a cross-chain USDC transfer of ${amountNum} USDC from ${bridgeSourceChain} to your Arc Testnet account via CCTP...`,
         type: "loading"
       });
 
-      // Connect to Circle CCTP attestations
-      const attestationResult = await circleService.requestCCTPBridge(
-        bridgeSourceChain,
-        userAddress || advertiserWallet,
-        amountNum
-      );
+      // Step 1 & 2: Trigger backend burn transaction
+      const burnRes = await fetch("/api/bridge/burn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromChain: bridgeSourceChain,
+          amount: bridgeAmount,
+          destinationAddress: userAddress || advertiserWallet
+        })
+      });
 
-      setBridgeStep(2);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setBridgeStep(3);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const burnData = await burnRes.json();
+      if (!burnRes.ok || burnData.error) {
+        throw new Error(burnData.error || "Failed to trigger CCTP burn");
+      }
 
-      const txHash = "0x" + Math.random().toString(16).substr(2, 64);
+      const burnTxHash = burnData.burnTxHash;
+
+      // Update steps for burn success
+      setBridgeSteps([
+        { 
+          label: "USDC Burn Approval", 
+          description: "Approved CCTP TokenMessenger contract successfully.", 
+          status: "success" as const,
+          txHash: burnTxHash,
+          explorerUrl: bridgeSourceChain === "Ethereum" 
+            ? `https://sepolia.etherscan.io/tx/${burnTxHash}` 
+            : bridgeSourceChain === "Base" 
+              ? `https://sepolia.basescan.org/tx/${burnTxHash}`
+              : `https://sepolia.arbiscan.io/tx/${burnTxHash}`
+        },
+        { 
+          label: "Initiate CCTP Burn", 
+          description: `Burn transaction completed on ${bridgeSourceChain}.`, 
+          status: "success" as const,
+          txHash: burnTxHash,
+          explorerUrl: bridgeSourceChain === "Ethereum" 
+            ? `https://sepolia.etherscan.io/tx/${burnTxHash}` 
+            : bridgeSourceChain === "Base" 
+              ? `https://sepolia.basescan.org/tx/${burnTxHash}`
+              : `https://sepolia.arbiscan.io/tx/${burnTxHash}`
+        },
+        { 
+          label: "Fetch Circle Attestation", 
+          description: "Polling Circle Sandbox Iris API for signed attestation...", 
+          status: "running" as const 
+        },
+        { 
+          label: "Mint Claiming on Arc", 
+          description: "Awaiting signed attestation message payload.", 
+          status: "idle" as const 
+        }
+      ]);
+
+      setStatusModal({
+        show: true,
+        title: "Polling Circle Attestation",
+        message: "CCTP Burn transaction confirmed. Polling Circle Attestation service for signatures...",
+        type: "loading"
+      });
+
+      // Step 3 & 4: Poll attestation & mint claim on backend
+      let attestationClaimed = false;
+      let claimData: any = null;
+
+      while (!attestationClaimed) {
+        const claimRes = await fetch("/api/bridge/attestation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            burnTxHash,
+            fromChain: bridgeSourceChain,
+            campaignId: campaigns.length > 0 ? campaigns[0].id : undefined
+          })
+        });
+
+        claimData = await claimRes.json();
+        if (claimRes.ok && claimData.status === "SUCCESS") {
+          attestationClaimed = true;
+        } else if (claimData.status === "PENDING_ATTESTATION") {
+          await new Promise(resolve => setTimeout(resolve, 4000));
+        } else {
+          throw new Error(claimData.error || "Failed to poll and claim CCTP attestation");
+        }
+      }
+
+      clearInterval(timer);
+      setEstRemainingTime("0s");
+
+      setBridgeSteps([
+        { 
+          label: "USDC Burn Approval", 
+          description: "Approved CCTP TokenMessenger contract successfully.", 
+          status: "success" as const,
+          txHash: burnTxHash,
+          explorerUrl: bridgeSourceChain === "Ethereum" 
+            ? `https://sepolia.etherscan.io/tx/${burnTxHash}` 
+            : bridgeSourceChain === "Base" 
+              ? `https://sepolia.basescan.org/tx/${burnTxHash}`
+              : `https://sepolia.arbiscan.io/tx/${burnTxHash}`
+        },
+        { 
+          label: "Initiate CCTP Burn", 
+          description: `Burn transaction completed on ${bridgeSourceChain}.`, 
+          status: "success" as const,
+          txHash: burnTxHash,
+          explorerUrl: bridgeSourceChain === "Ethereum" 
+            ? `https://sepolia.etherscan.io/tx/${burnTxHash}` 
+            : bridgeSourceChain === "Base" 
+              ? `https://sepolia.basescan.org/tx/${burnTxHash}`
+              : `https://sepolia.arbiscan.io/tx/${burnTxHash}`
+        },
+        { 
+          label: "Fetch Circle Attestation", 
+          description: "Attestation signed and fetched from Circle Sandbox.", 
+          status: "success" as const 
+        },
+        { 
+          label: "Mint Claiming on Arc", 
+          description: "USDC claimed and minted successfully on Arc L1!", 
+          status: "success" as const,
+          txHash: claimData.claimTxHash,
+          explorerUrl: `https://testnet.arcscan.app/tx/${claimData.claimTxHash}`
+        }
+      ]);
+
       const newTx = {
-        hash: txHash,
-        block: 4920422,
+        hash: claimData.claimTxHash,
+        block: 5042002,
         method: "cctpBridgeMint",
         status: "Success",
         from: "0x0000000000000000000000000000000000000000",
         to: userAddress || advertiserWallet,
         value: amountNum,
         timestamp: "Just now",
-        details: `CCTP Attestation Verified. Bridged ${amountNum} USDC. Tx Hash: ${txHash}`
+        details: `CCTP Teleport complete. ${amountNum} USDC minted on Arc L1. Tx: ${claimData.claimTxHash}`
       };
-
       setTransactions(prev => [newTx, ...prev]);
+
+      syncAllData();
 
       setStatusModal({
         show: true,
-        title: "USDC Bridged Successfully!",
-        message: `Circle CCTP Attestation has been successfully verified! Minted ${amountNum} USDC directly to your Arc wallet.`,
+        title: "USDC Teleported!",
+        message: `Successfully bridged and claimed ${amountNum} USDC from ${bridgeSourceChain} to Arc Testnet.`,
         type: "success"
       });
+
     } catch (err: any) {
       console.error(err);
-      showErrorModal("Crosschain Bridge Failed", err);
+      clearInterval(timer);
+      setBridgeSteps(prev => prev.map(s => s.status === "running" ? { ...s, status: "failed" as const, description: err?.message || "Error occurred" } : s));
+      showErrorModal("CCTP Teleport Failed", err);
     } finally {
       setBridgeActive(false);
-      setBridgeStep(0);
     }
   };
 
@@ -2411,8 +2552,9 @@ export default function Home() {
                         onChange={(e) => setBridgeSourceChain(e.target.value)}
                         className="w-full px-2.5 py-2 bg-white border-2 border-[#744D2B] rounded-xl text-[#744D2B] outline-none"
                       >
-                        <option value="ethereum">Sepolia</option>
-                        <option value="solana">Solana Dev</option>
+                        <option value="Ethereum">Ethereum Sepolia</option>
+                        <option value="Base">Base Sepolia</option>
+                        <option value="Arbitrum">Arbitrum Sepolia</option>
                       </select>
                     </div>
                     <div>
@@ -2433,6 +2575,18 @@ export default function Home() {
                     {bridgeActive ? "Teleporting..." : `Teleport Digital Dollars`}
                   </button>
                 </form>
+
+                {showBridgeTracker && (
+                  <div className="mt-3.5">
+                    <BridgeProgressTracker
+                      steps={bridgeSteps}
+                      amount={parseFloat(bridgeAmount)}
+                      sourceChain={bridgeSourceChain}
+                      destinationAddress={userAddress || advertiserWallet}
+                      estimatedTimeLeft={estRemainingTime}
+                    />
+                  </div>
+                )}
               </div>
 
             </div>
