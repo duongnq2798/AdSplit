@@ -55,6 +55,9 @@ contract AdRevenueSplitter {
     // Nonce for unique campaign IDs
     uint256 private campaignNonce;
     
+    // Mapping from click fingerprint to usage status to prevent double-spend/replays
+    mapping(bytes32 => bool) public usedFingerprints;
+    
     event CampaignCreated(
         bytes32 indexed campaignId, 
         address indexed advertiser, 
@@ -189,9 +192,25 @@ contract AdRevenueSplitter {
     
     /**
      * @notice Distributes payout for a single click instantly to dynamic recipients.
-     * Called by the Fraud Detection Oracle after evaluating click proof.
+     * Called by any relayer or account with a valid signature from the Fraud Detection Oracle.
      */
-    function recordEngagement(bytes32 _campaignId, bytes32 _clickFingerprint) external onlyOracle {
+    function recordEngagement(
+        bytes32 _campaignId, 
+        bytes32 _clickFingerprint, 
+        bytes calldata _signature
+    ) external {
+        require(!usedFingerprints[_clickFingerprint], "Fingerprint already used");
+        
+        // Compute EIP-191 message hash
+        bytes32 messageHash = keccak256(abi.encodePacked(_campaignId, _clickFingerprint));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+        
+        // Recover signer address
+        address signer = recoverSigner(ethSignedMessageHash, _signature);
+        require(signer == oracleNode, "Invalid oracle signature");
+        
+        usedFingerprints[_clickFingerprint] = true;
+
         Campaign storage campaign = campaigns[_campaignId];
         require(campaign.active, "Campaign is not active");
         require(campaign.remainingBudget >= campaign.costPerClick, "Campaign budget exhausted");
@@ -230,6 +249,27 @@ contract AdRevenueSplitter {
                 campaign.remainingBudget = 0;
                 require(usdcToken.transfer(campaign.advertiser, dustRefund), "Refund failed");
             }
+        }
+    }
+
+    /**
+     * @notice Helper to recover the signer address from an EIP-191 signature.
+     */
+    function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory _sig) public pure returns (address) {
+        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_sig);
+        return ecrecover(_ethSignedMessageHash, v, r, s);
+    }
+
+    /**
+     * @notice Helper to split a signature into r, s, v components.
+     */
+    function splitSignature(bytes memory sig) public pure returns (bytes32 r, bytes32 s, uint8 v) {
+        require(sig.length == 65, "Invalid signature length");
+
+        assembly {
+            r := mload(add(sig, 32))
+            s := mload(add(sig, 64))
+            v := byte(0, mload(add(sig, 96)))
         }
     }
     
