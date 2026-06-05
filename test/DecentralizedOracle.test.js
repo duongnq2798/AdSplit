@@ -14,6 +14,9 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
   let unauthorizedOracle;
   let platformWallet;
   let creator1;
+  const proofA = [0, 0];
+  const proofB = [[0, 0], [0, 0]];
+  const proofC = [0, 0];
 
   beforeEach(async function () {
     [
@@ -142,7 +145,10 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
       const tx = await splitter.recordEngagement(
         campaignId,
         clickFingerprint,
-        [sig1, sig2]
+        [sig1, sig2],
+        proofA,
+        proofB,
+        proofC
       );
       await expect(tx).to.emit(splitter, "RevenueSplitExecuted");
 
@@ -161,7 +167,10 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
         splitter.recordEngagement(
           campaignId,
           clickFingerprint,
-          [sig1]
+          [sig1],
+          proofA,
+          proofB,
+          proofC
         )
       ).to.be.revertedWith("Insufficient signatures");
     });
@@ -177,7 +186,10 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
         splitter.recordEngagement(
           campaignId,
           clickFingerprint,
-          [sig1, sig1]
+          [sig1, sig1],
+          proofA,
+          proofB,
+          proofC
         )
       ).to.be.revertedWith("Duplicate signature");
     });
@@ -194,7 +206,10 @@ describe("AdRevenueSplitter Decentralized Oracle Consensus Network (DON)", funct
         splitter.recordEngagement(
           campaignId,
           clickFingerprint,
-          [sig1, sigUnauthorized]
+          [sig1, sigUnauthorized],
+          proofA,
+          proofB,
+          proofC
         )
       ).to.be.revertedWith("Invalid oracle signature");
     });

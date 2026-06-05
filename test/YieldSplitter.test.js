@@ -11,6 +11,9 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
   let oracleNode;
   let platformWallet;
   let creator1;
+  const proofA = [0, 0];
+  const proofB = [[0, 0], [0, 0]];
+  const proofC = [0, 0];
 
   beforeEach(async function () {
     [owner, advertiser, oracleNode, platformWallet, creator1] = await ethers.getSigners();
@@ -164,7 +167,7 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
 
     const beforeCreatorBalance = await mockUSDC.balanceOf(creator1.address);
 
-    await splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [sig]);
+    await splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [sig], proofA, proofB, proofC);
 
     const afterCreatorBalance = await mockUSDC.balanceOf(creator1.address);
     // Platform fee is 3% of 1 USDC = 0.03 USDC.
@@ -209,7 +212,7 @@ describe("AdRevenueSplitter Yield-Generation & Vault Integration Tests", functio
     const beforeCreatorBalance = await mockUSDC.balanceOf(creator1.address);
 
     // Should succeed because of the fallback mechanism using contract's local USDC
-    await splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [sig]);
+    await splitter.connect(owner).recordEngagement(campaignId, clickFingerprint, [sig], proofA, proofB, proofC);
 
     const afterCreatorBalance = await mockUSDC.balanceOf(creator1.address);
     expect(afterCreatorBalance - beforeCreatorBalance).to.equal(ethers.parseUnits("0.97", 6));
