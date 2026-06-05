@@ -44,12 +44,29 @@ export interface DbClickLog {
 }
 
 export class SupabaseDbService {
+  private get client() {
+    if (typeof window === 'undefined') {
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (serviceRoleKey && serviceRoleKey !== 'your-service-role-key') {
+        return createClient(supabaseUrl, serviceRoleKey, {
+          db: {
+            schema: 'adsplit'
+          },
+          auth: {
+            persistSession: false
+          }
+        });
+      }
+    }
+    return supabase;
+  }
+
   /**
    * Fetch all campaigns sorted by creation date
    */
   async getActiveCampaigns(): Promise<DbCampaign[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await this.client
         .from('campaigns')
         .select('*')
         .order('created_at', { ascending: false });
@@ -67,7 +84,7 @@ export class SupabaseDbService {
    */
   async saveCampaign(campaign: DbCampaign, splits: { creator_address: string; creator_name: string; share_bps: number }[]): Promise<boolean> {
     try {
-      const { error: campaignErr } = await supabase
+      const { error: campaignErr } = await this.client
         .from('campaigns')
         .insert([campaign]);
 
@@ -78,7 +95,7 @@ export class SupabaseDbService {
         ...s
       }));
 
-      const { error: splitErr } = await supabase
+      const { error: splitErr } = await this.client
         .from('campaign_splits')
         .insert(formattedSplits);
 
@@ -94,7 +111,7 @@ export class SupabaseDbService {
   async logEngagement(log: DbClickLog): Promise<boolean> {
     try {
       // Check if parent campaign exists in database to prevent Foreign Key Violation
-      const { data: parentCampaign } = await supabase
+      const { data: parentCampaign } = await this.client
         .from('campaigns')
         .select('id')
         .eq('id', log.campaign_id)
@@ -119,7 +136,7 @@ export class SupabaseDbService {
           distributor_share: 1000
         };
 
-        const { error: seedErr } = await supabase
+        const { error: seedErr } = await this.client
           .from('campaigns')
           .insert([dummyCampaign]);
 
@@ -128,7 +145,7 @@ export class SupabaseDbService {
         }
       }
 
-      const { error } = await supabase
+      const { error } = await this.client
         .from('click_logs')
         .insert([log]);
 
@@ -136,7 +153,7 @@ export class SupabaseDbService {
 
       // If marked as bot fraud, auto-sync to blacklist table
       if (log.status === 'bot_fraud') {
-        await supabase
+        await this.client
           .from('ip_blacklist')
           .insert([{
             ip_address: log.ip_address,
@@ -156,7 +173,7 @@ export class SupabaseDbService {
    */
   async incrementMicroBalance(campaignId: string, creatorAddress: string, amount: number): Promise<boolean> {
     try {
-      const { error } = await supabase.rpc('increment_micro_balance', {
+      const { error } = await this.client.rpc('increment_micro_balance', {
         p_campaign_id: campaignId,
         p_creator_address: creatorAddress,
         p_amount: amount
@@ -174,7 +191,7 @@ export class SupabaseDbService {
    */
   async lockMicroBalancesForSettlement(threshold: number): Promise<{ campaign_id: string; creator_address: string; settling_amount: number }[]> {
     try {
-      const { data, error } = await supabase.rpc('lock_micro_balances_for_settlement', {
+      const { data, error } = await this.client.rpc('lock_micro_balances_for_settlement', {
         threshold_val: threshold
       });
       if (error) throw error;
@@ -190,7 +207,7 @@ export class SupabaseDbService {
    */
   async confirmSettlement(campaignId: string, creatorAddress: string, amount: number): Promise<boolean> {
     try {
-      const { error } = await supabase.rpc('confirm_micro_settlement', {
+      const { error } = await this.client.rpc('confirm_micro_settlement', {
         p_campaign_id: campaignId,
         p_creator_address: creatorAddress,
         p_amount: amount
@@ -208,7 +225,7 @@ export class SupabaseDbService {
    */
   async rollbackSettlement(campaignId: string, creatorAddress: string): Promise<boolean> {
     try {
-      const { error } = await supabase.rpc('rollback_micro_settlement', {
+      const { error } = await this.client.rpc('rollback_micro_settlement', {
         p_campaign_id: campaignId,
         p_creator_address: creatorAddress
       });
@@ -225,7 +242,7 @@ export class SupabaseDbService {
    */
   async depositToGateway(advertiser: string, amount: number): Promise<boolean> {
     try {
-      const { error } = await supabase.rpc('deposit_to_gateway', {
+      const { error } = await this.client.rpc('deposit_to_gateway', {
         p_advertiser: advertiser,
         p_amount: amount
       });
@@ -242,7 +259,7 @@ export class SupabaseDbService {
    */
   async deductGatewayBalance(advertiser: string, amount: number): Promise<boolean> {
     try {
-      const { data, error } = await supabase.rpc('deduct_gateway_balance', {
+      const { data, error } = await this.client.rpc('deduct_gateway_balance', {
         p_advertiser: advertiser,
         p_amount: amount
       });
@@ -259,7 +276,7 @@ export class SupabaseDbService {
    */
   async getGatewayBalance(advertiser: string): Promise<number> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await this.client
         .from('gateway_deposits')
         .select('balance')
         .eq('advertiser_address', advertiser)

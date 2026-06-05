@@ -66,6 +66,7 @@ export class CircleIntegrationService {
   /**
    * Request CCTP Crosschain USDC Bridge (Domain 26)
    * Bridges USDC from source chain Sepolia directly to Arc Testnet.
+   * Client-side safe mock fallback to avoid credential exposure.
    */
   async requestCCTPBridge(
     sourceChain: string,
@@ -73,53 +74,17 @@ export class CircleIntegrationService {
     amount: number
   ) {
     try {
-      // If Private Key is configured, execute the official AppKit crosschain transfer
-      const privateKey = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_PRIVATE_KEY || process.env.PRIVATE_KEY) : '';
-      if (privateKey) {
-        console.log('Initiating CCTP Bridge via official Circle App Kit...');
-        const adapter = createViemAdapterFromPrivateKey({
-          privateKey: privateKey as string,
-        });
-
-        const standardSourceChain = sourceChain.charAt(0).toUpperCase() + sourceChain.slice(1);
-        const result = await this.appKit.bridge({
-          from: { adapter, chain: standardSourceChain as any },
-          to: { adapter, chain: 'Arc' as any },
-          amount: amount.toString(),
-          config: {
-            transferSpeed: 'FAST',
-          }
-        });
-
-        return {
-          status: 'SUCCESS',
-          sourceChain,
-          destinationChain: 'arc_testnet',
-          destinationAddress,
-          amountTransferred: amount,
-          attestationSignature: result.transactionHash || '0x55aa3be2f677cd6303cec089b5f319d72a',
-        };
-      }
-
-      // Safe fallback to mock bridging logic for UI sandbox demos
-      console.log('Initiating CCTP Bridge via manual API and mock verification...');
-      const burnTxHash = "0x" + Math.random().toString(16).substr(2, 64);
+      console.log('Initiating CCTP Bridge Mock fallback (Client-safe)...');
+      const mockBurnTxHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
       
-      const attestationResponse = await fetch(`${this.config.baseUrl}/cctp/attestations/${burnTxHash}`, {
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-        },
-      });
-
-      const attestationData = await attestationResponse.json();
-
       return {
         status: 'SUCCESS',
         sourceChain,
         destinationChain: 'arc_testnet',
         destinationAddress,
         amountTransferred: amount,
-        attestationSignature: attestationData?.signature || '0x55aa3be2f677cd6303cec089b5f319d72a',
+        attestationSignature: '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(""),
+        burnTxHash: mockBurnTxHash
       };
     } catch (error) {
       console.error('Failed to request CCTP Bridge:', error);

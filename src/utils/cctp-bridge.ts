@@ -73,7 +73,7 @@ export class CctpBridgeService {
     destinationAddress: string,
     privateKey?: string
   ): Promise<{ txHash: string; messageHash: string }> {
-    const key = privateKey || process.env.DEPLOYER_PRIVATE_KEY || process.env.NEXT_PUBLIC_PRIVATE_KEY;
+    const key = privateKey || process.env.DEPLOYER_PRIVATE_KEY || process.env.PRIVATE_KEY || process.env.NEXT_PUBLIC_PRIVATE_KEY;
     if (!key) {
       throw new Error('Private key is required to sign the CCTP burn transaction.');
     }

@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
-    const apiKey = process.env.NEXT_PUBLIC_CIRCLE_API_KEY || 'sandbox_key';
+    const apiKey = process.env.CIRCLE_API_KEY || process.env.NEXT_PUBLIC_CIRCLE_API_KEY || 'sandbox_key';
     const baseUrl = apiKey.startsWith('TEST_API_KEY') || apiKey === 'sandbox_key'
       ? 'https://api-sandbox.circle.com/v1'
       : 'https://api.circle.com/v1';

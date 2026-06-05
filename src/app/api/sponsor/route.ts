@@ -17,8 +17,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { walletId, contractAddress, abiMethod, args, telemetryPayload, zkProof } = body;
 
-    const apiKey = process.env.NEXT_PUBLIC_CIRCLE_API_KEY || 'sandbox_key';
-    const entitySecret = process.env.NEXT_PUBLIC_CIRCLE_ENTITY_SECRET || '';
+    const apiKey = process.env.CIRCLE_API_KEY || process.env.NEXT_PUBLIC_CIRCLE_API_KEY || 'sandbox_key';
+    const entitySecret = process.env.CIRCLE_ENTITY_SECRET || process.env.NEXT_PUBLIC_CIRCLE_ENTITY_SECRET || '';
 
     let sponsoredArgs = [...args];
     let abiFunctionSignature = abiMethod;
