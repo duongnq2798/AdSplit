@@ -25,7 +25,7 @@ import {
   DbClickLog 
 } from "@/utils/supabase";
 import { CircleIntegrationService } from "@/utils/circle";
-import WalletOnboardingModal from "@/components/WalletOnboardingModal";
+import UnifiedAuthModal from "@/components/UnifiedAuthModal";
 import { BridgeProgressTracker } from "@/components/BridgeProgressTracker";
 import { circleUCWService } from "@/utils/circle-ucw";
 import { 
@@ -196,20 +196,36 @@ export default function Home() {
   const [isCreatingCampaign, setIsCreatingCampaign] = useState<boolean>(false);
   const [withdrawingCampaignId, setWithdrawingCampaignId] = useState<string | null>(null);
 
-  // Circle User-Controlled Wallet (UCW) states
-  const [creatorEmail, setCreatorEmail] = useState<string>(() => {
+  // Unified Auth Session States
+  const [authType, setAuthType] = useState<'circle' | 'web3' | 'mock' | null>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem("creator_email") || "";
+      return (localStorage.getItem("adsplit_auth_type") as 'circle' | 'web3' | 'mock') || null;
+    }
+    return null;
+  });
+  const [userEmail, setUserEmail] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem("adsplit_user_email") || "";
     }
     return "";
   });
-  const [creatorWalletAddress, setCreatorWalletAddress] = useState<string>(() => {
+  const [circleAddress, setCircleAddress] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem("creator_wallet_address") || "";
+      return localStorage.getItem("adsplit_circle_address") || "";
     }
     return "";
   });
-  const [isUCWModalOpen, setIsUCWModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+
+  // Maintain backward compatibility for original code states
+  const creatorEmail = userEmail;
+  const creatorWalletAddress = circleAddress;
+  const setCreatorEmail = setUserEmail;
+  const setCreatorWalletAddress = setCircleAddress;
+  const isUCWModalOpen = isAuthModalOpen;
+  const setIsUCWModalOpen = setIsAuthModalOpen;
+
   const [ucwBalance, setUcwBalance] = useState("0.00");
   const [isWithdrawingUCW, setIsWithdrawingUCW] = useState(false);
   const [withdrawDestAddress, setWithdrawDestAddress] = useState("");
@@ -245,6 +261,47 @@ export default function Home() {
     } else {
       openConnectModal?.();
     }
+  };
+
+  useEffect(() => {
+    if (walletConnected && userAddress && authType !== 'circle' && authType !== 'mock') {
+      setAuthType('web3');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem("adsplit_auth_type", "web3");
+      }
+    }
+  }, [walletConnected, userAddress, authType]);
+
+  // Unified active session variables
+  const activeAddress = (() => {
+    if (authType === 'web3') return userAddress;
+    if (authType === 'circle') return circleAddress;
+    if (authType === 'mock') {
+      return circleAddress || "0xMockAdvertiser888888888888888888888888";
+    }
+    return undefined;
+  })();
+
+  const activeBalance = (() => {
+    if (authType === 'web3') return userBalance;
+    if (authType === 'circle' || authType === 'mock') return ucwBalance;
+    return "0.00";
+  })();
+
+  const isConnected = !!activeAddress;
+
+  const checkPinSetupPending = (): boolean => {
+    if (typeof window !== 'undefined' && localStorage.getItem('adsplit_pin_pending_email')) {
+      setIsAuthModalOpen(true);
+      setStatusModal({
+        show: true,
+        title: "Setup Pending",
+        message: "Please complete your non-custodial wallet PIN configuration to continue with this action.",
+        type: "error"
+      });
+      return true;
+    }
+    return false;
   };
   
   // Custom Contract Address Explorer
@@ -380,8 +437,24 @@ export default function Home() {
   };
 
   const handleWithdrawUCW = async () => {
+    if (checkPinSetupPending()) return;
     if (!creatorWalletAddress || !withdrawDestAddress || !withdrawAmount) return;
+    
     setIsWithdrawingUCW(true);
+    
+    if (authType === 'mock') {
+      setStatusModal({
+        show: true,
+        title: "Dispatched (Demo Mode)",
+        message: `[Demo Mode] Simulated transfer of ${withdrawAmount} USDC to ${withdrawDestAddress} succeeded!`,
+        type: "success"
+      });
+      setWithdrawAmount("");
+      setWithdrawDestAddress("");
+      setIsWithdrawingUCW(false);
+      return;
+    }
+
     try {
       setStatusModal({
         show: true,
@@ -442,10 +515,10 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (creatorWalletAddress && activeTab === "creator") {
-      fetchUCWBalance(creatorWalletAddress);
+    if (circleAddress) {
+      fetchUCWBalance(circleAddress);
     }
-  }, [creatorWalletAddress, activeTab]);
+  }, [circleAddress, activeTab]);
 
   // RainbowKit manages connection natively, no manual connectWallet required.
 
@@ -585,15 +658,17 @@ export default function Home() {
   // Automatically detects if the contract is deployed; if not, falls back to Sandbox Demo Mode.
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!walletConnected) {
+    if (!isConnected) {
+      setIsAuthModalOpen(true);
       setStatusModal({
         show: true,
-        title: "Wallet Required",
-        message: "Please connect your wallet first using the 'Connect Wallet' button in the top right header!",
+        title: "Sign In Required",
+        message: "Please sign in first using the 'Sign In' button in the top right header!",
         type: "error"
       });
       return;
     }
+    if (checkPinSetupPending()) return;
 
     const budgetNum = parseFloat(newCampaignBudget);
     const cpcNum = parseFloat(newCampaignCPC);
@@ -638,7 +713,7 @@ export default function Home() {
         const newCampaign: DbCampaign = {
           id: campaignId,
           title: newCampaignTitle,
-          advertiser: userAddress || advertiserWallet,
+          advertiser: activeAddress || advertiserWallet,
           total_budget: budgetNum,
           remaining_budget: budgetNum,
           cost_per_click: cpcNum,
@@ -651,10 +726,10 @@ export default function Home() {
 
         const dbSplits = [];
         if (hasAffiliate) {
-          dbSplits.push({ creator_address: userAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: 8000 });
+          dbSplits.push({ creator_address: activeAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: 8000 });
           dbSplits.push({ creator_address: newCampaignAffiliate.trim(), creator_name: "Affiliate Referral", share_bps: 1500 });
         } else {
-          dbSplits.push({ creator_address: userAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: leadShare });
+          dbSplits.push({ creator_address: activeAddress || advertiserWallet, creator_name: "Lead Creator", share_bps: leadShare });
           if (coAuthorShare > 0) {
             dbSplits.push({ creator_address: advertiserWallet, creator_name: "Co-Author", share_bps: coAuthorShare });
           }
@@ -670,7 +745,7 @@ export default function Home() {
           block: 4920420 + Math.floor(Math.random() * 100),
           method: "createCampaign",
           status: "Success (Sandbox)",
-          from: userAddress,
+          from: activeAddress,
           to: contractAddress,
           value: budgetNum,
           timestamp: "Just now",
@@ -694,6 +769,17 @@ export default function Home() {
       // ════════════════════════════════════════════════════════════════
       // LIVE MODE — contract is deployed, execute real on-chain calls
       // ════════════════════════════════════════════════════════════════
+
+      if (authType !== 'web3') {
+        setStatusModal({
+          show: true,
+          title: "Web3 Wallet Required",
+          message: "For sandbox demo convenience, campaign creation with Circle UCW runs in simulated Sandbox mode. To deploy a live escrow contract with real USDC on the Arc Testnet, please connect a Web3 wallet (MetaMask/RainbowKit) by choosing 'Connect Web3 Wallet' during Sign In.",
+          type: "error"
+        });
+        setIsCreatingCampaign(false);
+        return;
+      }
 
       const walletClient = createWalletClient({
         chain: arcTestnet,
@@ -903,15 +989,17 @@ export default function Home() {
 
   // Action: Real emergency withdraw from Escrow Smart Contract
   const handleWithdrawBudget = async (campaignId: string) => {
-    if (!walletConnected) {
+    if (!isConnected) {
+      setIsAuthModalOpen(true);
       setStatusModal({
         show: true,
-        title: "Wallet Required",
-        message: "Please connect your wallet first using the 'Connect Wallet' button in the top right header!",
+        title: "Sign In Required",
+        message: "Please sign in first using the 'Sign In' button in the top right header!",
         type: "error"
       });
       return;
     }
+    if (checkPinSetupPending()) return;
     setWithdrawingCampaignId(campaignId);
 
     try {
@@ -948,7 +1036,7 @@ export default function Home() {
           block: 4920435 + Math.floor(Math.random() * 100),
           method: "withdrawRemainingBudget",
           status: "Success (Sandbox)",
-          from: userAddress,
+          from: activeAddress,
           to: contractAddress,
           value: 0,
           timestamp: "Just now",
@@ -967,6 +1055,16 @@ export default function Home() {
       }
 
       // LIVE MODE — contract is deployed
+      if (authType !== 'web3') {
+        setStatusModal({
+          show: true,
+          title: "Web3 Wallet Required",
+          message: "For sandbox demo convenience, emergency budget withdraw with Circle UCW runs in local/database Sandbox mode. To interact directly with the live smart contract on-chain, please connect a Web3 wallet (MetaMask/RainbowKit).",
+          type: "error"
+        });
+        return;
+      }
+
       setStatusModal({
         show: true,
         title: "Closing Campaign",
@@ -1036,6 +1134,18 @@ export default function Home() {
   // Action: Real CCTP Bridge call (using Circle SDK APIs)
   const handleCCTPBridge = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isConnected) {
+      setIsAuthModalOpen(true);
+      setStatusModal({
+        show: true,
+        title: "Sign In Required",
+        message: "Please sign in first using the 'Sign In' button in the top right header!",
+        type: "error"
+      });
+      return;
+    }
+    if (checkPinSetupPending()) return;
+
     const amountNum = parseFloat(bridgeAmount);
     if (isNaN(amountNum) || amountNum <= 0) return;
 
@@ -1073,7 +1183,7 @@ export default function Home() {
         body: JSON.stringify({
           fromChain: bridgeSourceChain,
           amount: bridgeAmount,
-          destinationAddress: userAddress || advertiserWallet
+          destinationAddress: activeAddress || advertiserWallet
         })
       });
 
@@ -1683,120 +1793,79 @@ export default function Home() {
               </a>
             </div>
 
-            {/* Connected wallet widget styled dynamically using RainbowKit */}
+            {/* Connected account widget */}
             <div className="font-mono text-xs flex items-center gap-2">
-              <ConnectButton.Custom>
-                {({
-                  account,
-                  chain,
-                  openAccountModal,
-                  openChainModal,
-                  openConnectModal,
-                  authenticationStatus,
-                  mounted,
-                }) => {
-                  const ready = mounted && authenticationStatus !== 'loading';
-                  const connected =
-                    ready &&
-                    account &&
-                    chain &&
-                    (!authenticationStatus ||
-                      authenticationStatus === 'authenticated');
+              {isConnected ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Network pill */}
+                  <div className="bg-[#FCFAF6] border-3 border-[#744D2B] px-3.5 py-2 rounded-2xl font-bold text-[#744D2B] shadow-[0_3px_0_#744D2B] flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-[#F4C455] animate-pulse"></span>
+                    <span>Arc Testnet</span>
+                  </div>
 
-                  return (
-                    <div
-                      {...(!ready && {
-                        'aria-hidden': true,
-                        'style': {
-                          opacity: 0,
-                          pointerEvents: 'none',
-                          userSelect: 'none',
-                        },
-                      })}
+                  {/* Address & Copy & Balance Pill */}
+                  <div className="bg-[#FFFFFF] border-3 border-[#744D2B] px-4 py-2 rounded-2xl flex items-center gap-2.5 shadow-[0_3px_0_#744D2B]">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#35C7A4] status-active-dot animate-pulse"></span>
+                    <button
+                      onClick={async () => {
+                        if (activeAddress) {
+                          await navigator.clipboard.writeText(activeAddress);
+                          setIsCopied(true);
+                          setTimeout(() => setIsCopied(false), 2000);
+                        }
+                      }}
+                      className="font-bold text-[#744D2B] flex items-center gap-1.5 hover:text-[#F4C455] transition-colors cursor-pointer"
+                      title="Copy wallet address"
                     >
-                      {(() => {
-                        if (!connected) {
-                          return (
-                            <button
-                              onClick={handleDirectConnect}
-                              type="button"
-                              className="btn-solid-dark py-2.5 px-5 flex items-center gap-2 cursor-pointer transition-all"
-                            >
-                              <Wallet className="h-4 w-4" />
-                              Connect Wallet
-                            </button>
-                          );
-                        }
+                      <span>{activeAddress ? `${activeAddress.substring(0, 6)}...${activeAddress.substring(activeAddress.length - 4)}` : ""}</span>
+                      {isCopied ? (
+                        <span className="text-[9px] text-[#35C7A4] font-black uppercase">Copied!</span>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-60">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                      )}
+                    </button>
 
-                        if (chain.unsupported) {
-                          return (
-                            <button
-                              onClick={openChainModal}
-                              type="button"
-                              className="btn-solid-dark bg-[#E25252] hover:bg-[#C93B3B] py-2.5 px-5 flex items-center gap-2 cursor-pointer shadow-[0_4px_0_#744D2B]"
-                            >
-                              Wrong Network
-                            </button>
-                          );
-                        }
+                    {activeBalance && (
+                      <span className="text-[10px] bg-[#FEF9E7] text-[#744D2B] font-black border-2 border-[#744D2B]/20 px-2 py-0.5 rounded-lg">
+                        {activeBalance} USDC
+                      </span>
+                    )}
+                  </div>
 
-                        return (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              onClick={openChainModal}
-                              style={{ display: 'flex', alignItems: 'center' }}
-                              type="button"
-                              className="bg-[#FCFAF6] hover:bg-[#FEF9E7] border-3 border-[#744D2B] px-3.5 py-2 rounded-2xl font-bold text-[#744D2B] shadow-[0_3px_0_#744D2B] transition-all cursor-pointer"
-                            >
-                              {chain.hasIcon && (
-                                <div
-                                  style={{
-                                    background: chain.iconBackground,
-                                    width: 12,
-                                    height: 12,
-                                    borderRadius: 999,
-                                    overflow: 'hidden',
-                                    marginRight: 4,
-                                  }}
-                                >
-                                  {chain.iconUrl && (
-                                    <img
-                                      alt={chain.name ?? 'Chain icon'}
-                                      src={chain.iconUrl}
-                                      style={{ width: '100%', height: '100%' }}
-                                    />
-                                  )}
-                                </div>
-                              )}
-                              {chain.name}
-                            </button>
-
-                            <button
-                              onClick={openAccountModal}
-                              type="button"
-                              className="bg-[#FFFFFF] hover:bg-[#FCFAF6] border-3 border-[#744D2B] px-4 py-2 rounded-2xl flex items-center gap-2.5 shadow-[0_3px_0_#744D2B] transition-all cursor-pointer"
-                            >
-                              <span className="h-2.5 w-2.5 rounded-full bg-[#35C7A4] status-active-dot animate-pulse"></span>
-                              <span className="font-bold text-[#744D2B]">
-                                {account.displayName}
-                              </span>
-                              {account.displayBalance && !account.displayBalance.includes("NaN") ? (
-                                <span className="text-[10px] bg-[#FEF9E7] text-[#744D2B] font-black border-2 border-[#744D2B]/20 px-2 py-0.5 rounded-lg">
-                                  {account.displayBalance}
-                                </span>
-                              ) : userBalance && !userBalance.includes("NaN") ? (
-                                <span className="text-[10px] bg-[#FEF9E7] text-[#744D2B] font-black border-2 border-[#744D2B]/20 px-2 py-0.5 rounded-lg">
-                                  {userBalance} USDC
-                                </span>
-                              ) : null}
-                            </button>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  );
-                }}
-              </ConnectButton.Custom>
+                  {/* Logout Button */}
+                  <button
+                    onClick={() => {
+                      setAuthType(null);
+                      setUserEmail("");
+                      setCircleAddress("");
+                      setUcwBalance("0.00");
+                      if (typeof window !== 'undefined') {
+                        localStorage.removeItem("adsplit_auth_type");
+                        localStorage.removeItem("adsplit_user_email");
+                        localStorage.removeItem("adsplit_circle_address");
+                        localStorage.removeItem("creator_email");
+                        localStorage.removeItem("creator_wallet_address");
+                      }
+                    }}
+                    className="bg-white hover:bg-[#E25252]/10 border-3 border-[#E25252] text-[#E25252] px-3.5 py-2 rounded-2xl font-bold flex items-center gap-1.5 shadow-[0_3px_0_#E25252] hover:-translate-y-0.5 transition-all cursor-pointer"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span className="hidden sm:inline font-mono text-xs uppercase font-extrabold">Sign Out</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  type="button"
+                  className="btn-solid-dark py-2.5 px-5 flex items-center gap-2 cursor-pointer transition-all shadow-[0_4px_0_#744D2B]"
+                >
+                  <Wallet className="h-4 w-4 text-[#F4C455]" />
+                  Sign In
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1825,7 +1894,8 @@ export default function Home() {
       )}
 
       {/* 3. MULTI-COLUMN DESIGN CONSOLE GRID (Warm tactile card layout) */}
-      <main className="max-w-7xl mx-auto w-full px-4 md:px-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="relative w-full">
+        <main className={`max-w-7xl mx-auto w-full px-4 md:px-8 grid grid-cols-1 lg:grid-cols-3 gap-8 transition-all duration-500 relative ${!isConnected ? 'filter blur-sm select-none pointer-events-none' : ''}`}>
         
         {/* COLUMN 1 & 2: Active Plan Area */}
         <div className="lg:col-span-2 space-y-8">
@@ -2842,7 +2912,38 @@ export default function Home() {
 
         </div>
 
-      </main>
+        </main>
+
+        {!isConnected && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-white/35 backdrop-blur-md">
+            <div className="max-w-md w-full bg-[#FFFFFF]/90 backdrop-blur-lg border-4 border-[#744D2B] rounded-[32px] p-8 text-center space-y-6 shadow-[0_12px_32px_rgba(116,77,43,0.15)] animate-slide-up pointer-events-auto">
+              <div className="inline-flex p-4 bg-[#F4C455]/20 border-3 border-[#744D2B] rounded-3xl text-[#744D2B] relative">
+                <span className="text-3xl cozy-bounce">🍃</span>
+                <span className="absolute -top-1.5 -right-1.5 text-xs text-[#F4C455]">✨</span>
+              </div>
+              
+              <div className="space-y-2">
+                <h2 className="text-xl md:text-2xl font-black uppercase text-[#744D2B] tracking-tight">
+                  Welcome to AdSplit Desk
+                </h2>
+                <p className="text-xs text-[#8E7368] font-bold leading-relaxed font-sans">
+                  Connect your account to sponsor ad campaigns, claim instant micro-payout splits, and view real-time anti-fraud telemetry analytics.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="w-full py-4 bg-[#F4C455] border-4 border-[#744D2B] rounded-full text-xs font-black uppercase text-[#744D2B] shadow-[0_6px_0_#744D2B] hover:translate-y-0.5 hover:shadow-[0_3px_0_#744D2B] active:translate-y-1.5 active:shadow-none transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Wallet className="w-4.5 h-4.5" />
+                  Sign In / Register
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* HELP MODAL WINDOW popup inspired by Animal Crossing game dialogues */}
       {showHelpModal && (
@@ -3002,17 +3103,28 @@ export default function Home() {
         </div>
       )}
 
-      <WalletOnboardingModal
-        isOpen={isUCWModalOpen}
-        onClose={() => setIsUCWModalOpen(false)}
-        onOnboarded={(address, email) => {
-          setCreatorEmail(email);
-          setCreatorWalletAddress(address);
+      <UnifiedAuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={({ walletAddress, email, authType }) => {
+          setAuthType(authType);
+          setUserEmail(email || "");
+          setCircleAddress(walletAddress);
           if (typeof window !== 'undefined') {
-            localStorage.setItem("creator_email", email);
-            localStorage.setItem("creator_wallet_address", address);
+            localStorage.setItem("adsplit_auth_type", authType);
+            localStorage.setItem("adsplit_user_email", email || "");
+            localStorage.setItem("adsplit_circle_address", walletAddress);
+            localStorage.setItem("creator_email", email || "");
+            localStorage.setItem("creator_wallet_address", walletAddress);
           }
+          setStatusModal({
+            show: true,
+            title: "Signed In Successfully!",
+            message: `Welcome, ${email || "Web3 Native"}!\nWallet: ${walletAddress}\nMethod: ${authType.toUpperCase()}`,
+            type: "success"
+          });
         }}
+        openWeb3Connect={handleDirectConnect}
       />
 
     </div>
